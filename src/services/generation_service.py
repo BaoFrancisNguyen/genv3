@@ -179,8 +179,8 @@ class GenerationService:
         # Validation des bâtiments OSM
         if not buildings_osm:
             errors.append("Aucun bâtiment OSM fourni")
-        elif len(buildings_osm) > 50000:
-            errors.append("Trop de bâtiments (max 50000)")
+        elif len(buildings_osm) > 1000000:
+            errors.append("Trop de bâtiments (max 1,000,000)")
         elif len(buildings_osm) > 10000:
             warnings.append("Grand nombre de bâtiments - génération longue")
         

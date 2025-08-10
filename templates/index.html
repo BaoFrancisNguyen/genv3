@@ -3,989 +3,1223 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Générateur de Données Électriques - Malaysia</title>
-    
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    
-    <!-- Font Awesome -->
+    <title>Malaysia Electricity Generator v2.0</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
     <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+            --success-color: #27ae60;
+            --warning-color: #f39c12;
+            --danger-color: #e74c3c;
+            --light-bg: #f8f9fa;
+            --shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         }
-        
+
         .main-container {
-            background: rgba(255, 255, 255, 0.95);
+            background: white;
             border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            backdrop-filter: blur(10px);
-            margin: 20px;
-            padding: 30px;
+            box-shadow: var(--shadow);
+            margin: 2rem auto;
+            max-width: 1400px;
+            overflow: hidden;
         }
-        
+
         .header {
+            background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+            color: white;
+            padding: 2rem;
             text-align: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            color: white;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 700;
+        }
+
+        .status-bar {
+            background: var(--light-bg);
+            padding: 1rem;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .section-card {
+            background: white;
             border-radius: 15px;
+            padding: 1.5rem;
+            margin: 1.5rem;
+            box-shadow: var(--shadow);
         }
-        
-        .card {
-            border: none;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            transition: transform 0.3s ease;
-            margin-bottom: 20px;
+
+        .professional-select {
+            position: relative;
+            margin-bottom: 1.5rem;
         }
-        
-        .card:hover {
-            transform: translateY(-5px);
-        }
-        
-        .card-header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border-radius: 15px 15px 0 0 !important;
-            font-weight: bold;
-        }
-        
-        #map {
-            height: 400px;
+
+        .professional-select select {
+            width: 100%;
+            padding: 12px 45px 12px 15px;
+            border: 2px solid #e9ecef;
             border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            font-size: 1rem;
+            background: white;
+            appearance: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
         }
-        
+
+        .professional-select select:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+            outline: none;
+        }
+
+        .professional-select::after {
+            content: '\f078';
+            font-family: 'Font Awesome 6 Free';
+            font-weight: 900;
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #6c757d;
+            pointer-events: none;
+        }
+
+        .zone-info {
+            background: var(--light-bg);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 1rem;
+            display: none;
+        }
+
+        .zone-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .stat-value {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--primary-color);
+        }
+
+        .stat-label {
+            font-size: 0.9rem;
+            color: #6c757d;
+            margin-top: 0.5rem;
+        }
+
+        .method-selector {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 1rem 0;
+        }
+
+        .method-option {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 10px;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .method-option:hover {
+            border-color: var(--accent-color);
+            transform: translateY(-2px);
+        }
+
+        .method-option.selected {
+            border-color: var(--success-color);
+            background: #d4edda;
+        }
+
+        .progress-container {
+            display: none;
+            margin: 1.5rem 0;
+        }
+
+        .progress {
+            height: 25px;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            background: linear-gradient(90deg, var(--accent-color), var(--success-color));
+            transition: width 0.3s ease;
+        }
+
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--accent-color), #2980b9);
             border: none;
             border-radius: 10px;
             padding: 12px 30px;
-            font-weight: bold;
+            font-weight: 600;
             transition: all 0.3s ease;
         }
-        
+
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 6px 20px rgba(52, 152, 219, 0.3);
         }
-        
-        .zone-info {
-            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-            color: white;
-            padding: 15px;
+
+        .results-container {
+            display: none;
+            margin: 1.5rem;
+            padding: 1.5rem;
+            background: white;
+            border-radius: 15px;
+            box-shadow: var(--shadow);
+        }
+
+        .notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: white;
             border-radius: 10px;
-            margin: 10px 0;
+            padding: 1rem 1.5rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            transform: translateX(400px);
+            opacity: 0;
+            transition: all 0.3s ease;
+            max-width: 400px;
         }
-        
-        .estimation-info {
-            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-            color: white;
-            padding: 15px;
+
+        .notification.success { border-left: 4px solid var(--success-color); }
+        .notification.error { border-left: 4px solid var(--danger-color); }
+        .notification.warning { border-left: 4px solid var(--warning-color); }
+
+        .loading-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .loading-content {
+            background: white;
+            padding: 2rem;
+            border-radius: 15px;
+            text-align: center;
+            max-width: 400px;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--accent-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
             border-radius: 10px;
-            margin: 10px 0;
+            padding: 1rem;
+            margin: 1rem 0;
         }
-        
-        .progress {
-            height: 25px;
-            border-radius: 12px;
-            background: rgba(255,255,255,0.2);
+
+        .complexity-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
         }
-        
-        .progress-bar {
-            border-radius: 12px;
-            background: linear-gradient(90deg, #00c851, #007e33);
+
+        .complexity-low { background: #d4edda; color: #155724; }
+        .complexity-medium { background: #fff3cd; color: #856404; }
+        .complexity-high { background: #f8d7da; color: #721c24; }
+
+        .generation-section {
+            display: none;
         }
-        
-        .form-control, .form-select {
+
+        .form-control {
             border-radius: 10px;
             border: 2px solid #e9ecef;
-            transition: all 0.3s ease;
+            padding: 10px 15px;
         }
-        
-        .form-control:focus, .form-select:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
+
+        .form-control:focus {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
         }
-        
-        .loading-spinner {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        
-        .generation-results {
-            display: none;
-            margin-top: 20px;
-        }
-        
-        .download-section {
-            display: none;
-            margin-top: 20px;
-        }
-        
-        .badge {
-            border-radius: 20px;
-            padding: 8px 12px;
+
+        @media (max-width: 768px) {
+            .main-container {
+                margin: 1rem;
+                border-radius: 15px;
+            }
+            
+            .zone-stats {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid">
-        <div class="main-container">
-            <!-- Header -->
-            <div class="header">
-                <h1><i class="fas fa-bolt"></i> Générateur de Données Électriques Malaysia</h1>
-                <p class="mb-0">Génération de données de consommation électrique pour tout Malaysia</p>
+    <!-- Overlay de chargement -->
+    <div id="loading-overlay" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h5 id="loading-title">Chargement...</h5>
+            <p id="loading-message">Veuillez patienter</p>
+        </div>
+    </div>
+
+    <!-- Conteneur de notifications -->
+    <div id="notifications"></div>
+
+    <div class="main-container">
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fas fa-bolt"></i> Malaysia Electricity Generator v2.0</h1>
+            <p class="mb-0">Solution complète avec récupération OSM corrigée - TOUS les bâtiments</p>
+        </div>
+
+        <!-- Barre de statut -->
+        <div class="status-bar">
+            <div>
+                <strong>Statut :</strong> <span id="status-text">Prêt</span>
             </div>
-            
-            <!-- Carte Malaysia -->
-            <div class="card">
-                <div class="card-header">
-                    <i class="fas fa-map"></i> Carte Interactive Malaysia
-                </div>
-                <div class="card-body">
-                    <div id="map"></div>
-                    <div class="mt-3">
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle"></i> 
-                            Cliquez sur une zone pour la sélectionner. Les couleurs indiquent la complexité :
-                            <span class="badge bg-success">Vert = Simple</span>
-                            <span class="badge bg-warning">Orange = Modéré</span>
-                            <span class="badge bg-danger">Rouge = Complexe</span>
-                        </small>
-                    </div>
-                </div>
+            <div>
+                <i class="fas fa-database"></i> <span id="buildings-count">0</span> bâtiments chargés
             </div>
+        </div>
+
+        <!-- Section 1: Sélection de Zone -->
+        <div class="section-card">
+            <h4><i class="fas fa-map-marker-alt"></i> Sélection de Zone Malaysia</h4>
+            <p class="text-muted">Choisissez une zone pour charger TOUS ses bâtiments (pas seulement un carré)</p>
             
             <div class="row">
-                <!-- Sélection des zones -->
-                <div class="col-lg-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-map-marker-alt"></i> Sélection de Zone
-                        </div>
-                        <div class="card-body">
-                            <!-- Type de zone -->
-                            <div class="mb-3">
-                                <label class="form-label">Type de zone</label>
-                                <select class="form-select" id="zoneType">
-                                    <option value="">Sélectionnez un type</option>
-                                    <option value="country">🇲🇾 Malaysia entière</option>
-                                    <option value="state">🏛️ État</option>
-                                    <option value="federal_territory">🏛️ Territoire fédéral</option>
-                                    <option value="city">🏙️ Ville principale</option>
-                                    <option value="special">⭐ Région spéciale</option>
-                                </select>
-                            </div>
-                            
-                            <!-- Zone spécifique -->
-                            <div class="mb-3">
-                                <label class="form-label">Zone spécifique</label>
-                                <select class="form-select" id="zoneName" disabled>
-                                    <option value="">Choisissez d'abord un type</option>
-                                </select>
-                            </div>
-                            
-                            <!-- Informations de la zone sélectionnée -->
-                            <div id="zoneInfo" class="zone-info" style="display: none;">
-                                <h6><i class="fas fa-info-circle"></i> Informations de la zone</h6>
-                                <div id="zoneDetails"></div>
-                            </div>
-                        </div>
+                <div class="col-md-6">
+                    <div class="professional-select">
+                        <label class="form-label fw-bold">Type de zone</label>
+                        <select id="zone-type-select">
+                            <option value="">-- Sélectionnez un type de zone --</option>
+                            <option value="country">🇲🇾 Malaysia Entière</option>
+                            <option value="state">🏛️ États de Malaysia</option>
+                            <option value="federal_territory">🏛️ Territoires Fédéraux</option>
+                            <option value="major_city">🏙️ Villes Principales</option>
+                        </select>
                     </div>
                 </div>
                 
-                <!-- Paramètres de génération -->
-                <div class="col-lg-6">
-                    <div class="card">
-                        <div class="card-header">
-                            <i class="fas fa-cogs"></i> Paramètres de Génération
+                <div class="col-md-6">
+                    <div class="professional-select">
+                        <label class="form-label fw-bold">Zone spécifique</label>
+                        <select id="zone-name-select" disabled>
+                            <option value="">Choisissez d'abord un type</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Informations de la zone -->
+            <div id="zone-info" class="zone-info">
+                <h5><i class="fas fa-info-circle"></i> Informations de la Zone</h5>
+                <div class="zone-stats">
+                    <div class="stat-card">
+                        <div class="stat-value" id="zone-population">-</div>
+                        <div class="stat-label">Population</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="zone-area">-</div>
+                        <div class="stat-label">Superficie (km²)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="zone-buildings">-</div>
+                        <div class="stat-label">Bâtiments estimés</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" id="zone-complexity">-</div>
+                        <div class="stat-label">Complexité</div>
+                    </div>
+                </div>
+                
+                <div id="zone-warnings" class="warning-box" style="display: none;"></div>
+            </div>
+        </div>
+
+        <!-- Section 2: Méthodes OSM -->
+        <div class="section-card">
+            <h4><i class="fas fa-cogs"></i> Méthode de Récupération OSM</h4>
+            <p class="text-muted">NOUVEAU : Méthodes corrigées pour récupérer TOUS les bâtiments</p>
+            
+            <div class="method-selector">
+                <div class="method-option" data-method="administrative">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6><i class="fas fa-map"></i> Limites Administratives (Recommandé)</h6>
+                            <small class="text-muted">Utilise les relations OSM pour récupérer TOUS les bâtiments de la localité administrative</small>
                         </div>
-                        <div class="card-body">
-                            <div class="row">
-                                <div class="col-md-6">
-                                    <label class="form-label">Date de début</label>
-                                    <input type="date" class="form-control" id="startDate" value="2024-01-01">
-                                </div>
-                                <div class="col-md-6">
-                                    <label class="form-label">Date de fin</label>
-                                    <input type="date" class="form-control" id="endDate" value="2024-01-31">
-                                </div>
-                            </div>
-                            
-                            <div class="mt-3">
-                                <label class="form-label">Fréquence d'échantillonnage</label>
-                                <select class="form-select" id="frequency">
-                                    <option value="D">📅 Quotidien (1 point/jour)</option>
-                                    <option value="3H">🕒 Toutes les 3 heures (8 points/jour)</option>
-                                    <option value="1H">⏰ Toutes les heures (24 points/jour)</option>
-                                    <option value="30T" selected>⏱️ Toutes les 30 minutes (48 points/jour)</option>
-                                    <option value="15T">⚡ Toutes les 15 minutes (96 points/jour)</option>
-                                </select>
-                                <small class="text-muted">Plus la fréquence est élevée, plus la génération sera longue</small>
-                            </div>
-                            
-                            <!-- Estimation des ressources -->
-                            <div id="estimationInfo" class="estimation-info" style="display: none;">
-                                <h6><i class="fas fa-calculator"></i> Estimation des ressources</h6>
-                                <div id="estimationDetails"></div>
-                            </div>
+                        <i class="fas fa-check-circle text-success" style="display: none;"></i>
+                    </div>
+                </div>
+                
+                <div class="method-option" data-method="bbox">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6><i class="fas fa-square"></i> Rectangle Géographique Étendu</h6>
+                            <small class="text-muted">Récupère les bâtiments dans un rectangle élargi - peut manquer des zones périphériques</small>
                         </div>
+                        <i class="fas fa-check-circle text-success" style="display: none;"></i>
+                    </div>
+                </div>
+                
+                <div class="method-option" data-method="hybrid">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6><i class="fas fa-layer-group"></i> Méthode Hybride</h6>
+                            <small class="text-muted">Combine les deux méthodes pour une couverture maximale avec fallback automatique</small>
+                        </div>
+                        <i class="fas fa-check-circle text-success" style="display: none;"></i>
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- Section 3: Chargement OSM -->
+        <div class="section-card">
+            <h4><i class="fas fa-download"></i> Chargement des Bâtiments OSM</h4>
             
-            <!-- Boutons d'action -->
-            <div class="card">
-                <div class="card-body text-center">
-                    <button class="btn btn-primary btn-lg me-3" id="loadBuildingsBtn" disabled>
-                        <i class="fas fa-download"></i> Charger les Bâtiments OSM
+            <div class="d-flex gap-3 justify-content-center">
+                <button id="load-buildings-btn" class="btn btn-primary" disabled>
+                    <i class="fas fa-download"></i> Charger TOUS les Bâtiments OSM
+                </button>
+                <button id="estimate-btn" class="btn btn-outline-primary">
+                    <i class="fas fa-calculator"></i> Estimer la Complexité
+                </button>
+            </div>
+
+            <!-- Barre de progression -->
+            <div class="progress-container" id="progress-container">
+                <div class="d-flex justify-content-between mb-2">
+                    <span id="progress-text">Chargement...</span>
+                    <span id="progress-percent">0%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar" id="progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section 4: Génération de Données -->
+        <div class="section-card generation-section" id="generation-section">
+            <h4><i class="fas fa-bolt"></i> Génération de Données Électriques</h4>
+            
+            <div class="row">
+                <div class="col-md-3">
+                    <label class="form-label">Date de début</label>
+                    <input type="date" class="form-control" id="start-date" value="2024-01-01">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Date de fin</label>
+                    <input type="date" class="form-control" id="end-date" value="2024-01-31">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Fréquence</label>
+                    <select class="form-control" id="frequency">
+                        <option value="1H">Horaire</option>
+                        <option value="30T">30 minutes</option>
+                        <option value="15T">15 minutes</option>
+                        <option value="3H">3 heures</option>
+                        <option value="D">Journalier</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">&nbsp;</label>
+                    <button class="btn btn-success form-control" id="generate-btn">
+                        <i class="fas fa-bolt"></i> Générer
                     </button>
-                    <button class="btn btn-success btn-lg me-3" id="generateBtn" disabled>
-                        <i class="fas fa-play"></i> Générer les Données
-                    </button>
-                    <button class="btn btn-info btn-lg" id="estimateBtn" disabled>
-                        <i class="fas fa-calculator"></i> Estimer les Ressources
-                    </button>
                 </div>
             </div>
-            
-            <!-- Zone de progression -->
-            <div class="loading-spinner" id="loadingSpinner">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Chargement...</span>
-                </div>
-                <p class="mt-3" id="loadingMessage">Traitement en cours...</p>
-                <div class="progress mt-3" style="width: 400px; margin: 0 auto;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" id="progressBar" role="progressbar" style="width: 0%"></div>
-                </div>
+        </div>
+
+        <!-- Section 5: Résultats -->
+        <div class="results-container" id="results-container">
+            <h4><i class="fas fa-chart-bar"></i> Résultats</h4>
+            <div id="results-content">
+                <!-- Le contenu sera injecté dynamiquement -->
             </div>
-            
-            <!-- Résultats de génération -->
-            <div class="generation-results" id="generationResults">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="fas fa-chart-bar"></i> Résultats de Génération
-                    </div>
-                    <div class="card-body">
-                        <div id="resultsContent"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Section de téléchargement -->
-            <div class="download-section" id="downloadSection">
-                <div class="card">
-                    <div class="card-header">
-                        <i class="fas fa-download"></i> Téléchargements
-                    </div>
-                    <div class="card-body">
-                        <div id="downloadLinks"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Alertes -->
-            <div id="alertContainer"></div>
         </div>
     </div>
-    
-    <!-- Scripts -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
     <script>
         // Configuration globale
-        const appState = {
-            selectedZone: null,
-            buildingsLoaded: false,
-            buildingsData: [],
-            estimationData: null,
-            map: null
+        const AppConfig = {
+            apiBase: '/api',
+            defaultMethod: 'administrative'
         };
-        
-        // Initialisation de la carte
-        function initMap() {
-            console.log('🗺️ Initialisation de la carte...');
+
+        // État de l'application
+        let appState = {
+            selectedZone: null,
+            selectedMethod: 'administrative',
+            loadedBuildings: [],
+            generatedData: null,
+            isLoading: false
+        };
+
+        // ================== UTILITAIRES ==================
+
+        function showNotification(message, type = 'success', duration = 5000) {
+            const notifications = document.getElementById('notifications');
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
             
-            appState.map = L.map('map').setView([4.2105, 108.9758], 6);
+            const icons = {
+                success: '✅',
+                error: '❌', 
+                warning: '⚠️',
+                info: 'ℹ️'
+            };
             
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenStreetMap contributors',
-                maxZoom: 18
-            }).addTo(appState.map);
+            notification.innerHTML = `
+                <div>
+                    <strong>${icons[type]} ${message}</strong>
+                </div>
+                <button onclick="this.parentElement.remove()" style="background: none; border: none; font-size: 1.2em; cursor: pointer; margin-left: 1rem;">×</button>
+            `;
             
-            // Ajouter un marqueur pour Malaysia
-            L.marker([4.2105, 108.9758])
-                .addTo(appState.map)
-                .bindPopup('<b>Malaysia</b><br>Centre géographique')
-                .openPopup();
+            notifications.appendChild(notification);
             
-            console.log('✅ Carte initialisée');
+            // Animation d'entrée
+            setTimeout(() => {
+                notification.style.transform = 'translateX(0)';
+                notification.style.opacity = '1';
+            }, 100);
+            
+            // Auto-suppression
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, duration);
         }
-        
-        // Gestionnaire de sélection de type de zone
-        document.getElementById('zoneType').addEventListener('change', function() {
-            const zoneType = this.value;
-            const zoneNameSelect = document.getElementById('zoneName');
+
+        function showLoading(show = true, title = 'Chargement...', message = 'Veuillez patienter') {
+            const overlay = document.getElementById('loading-overlay');
+            const titleEl = document.getElementById('loading-title');
+            const messageEl = document.getElementById('loading-message');
             
-            console.log(`🔄 Type de zone sélectionné: ${zoneType}`);
-            
-            // Effacer les options existantes
-            zoneNameSelect.innerHTML = '<option value="">Chargement des zones...</option>';
-            zoneNameSelect.disabled = true;
-            
-            if (zoneType) {
-                // Charger les zones depuis l'API
-                loadZonesByType(zoneType);
+            if (show) {
+                titleEl.textContent = title;
+                messageEl.textContent = message;
+                overlay.style.display = 'flex';
             } else {
-                zoneNameSelect.innerHTML = '<option value="">Choisissez d\'abord un type</option>';
-                resetSelection();
+                overlay.style.display = 'none';
             }
-        });
-        
-        // Charger les zones par type depuis l'API
-        function loadZonesByType(zoneType) {
-            fetch('/api/zones')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const zones = data.zones.filter(zone => zone.type === zoneType);
-                        populateZoneSelect(zones);
-                    } else {
-                        showAlert('Erreur lors du chargement des zones: ' + data.error, 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur chargement zones:', error);
-                    showAlert('Erreur de communication avec le serveur', 'danger');
-                });
+            
+            appState.isLoading = show;
         }
-        
-        // Peupler le sélecteur de zones
-        function populateZoneSelect(zones) {
-            const zoneNameSelect = document.getElementById('zoneName');
+
+        function updateProgress(percent, text = '') {
+            const container = document.getElementById('progress-container');
+            const bar = document.getElementById('progress-bar');
+            const percentEl = document.getElementById('progress-percent');
+            const textEl = document.getElementById('progress-text');
             
-            zoneNameSelect.innerHTML = '<option value="">Sélectionnez une zone</option>';
-            
-            zones.forEach(zone => {
-                const option = document.createElement('option');
-                option.value = zone.zone_id;
-                option.textContent = `${zone.name} (${zone.estimated_buildings?.toLocaleString()} bâtiments)`;
-                option.dataset.complexity = zone.complexity_level;
-                zoneNameSelect.appendChild(option);
-            });
-            
-            zoneNameSelect.disabled = false;
-            
-            console.log(`✅ ${zones.length} zones chargées`);
-        }
-        
-        // Gestionnaire de sélection de zone spécifique
-        document.getElementById('zoneName').addEventListener('change', function() {
-            const zoneName = this.value;
-            
-            if (zoneName) {
-                console.log(`🎯 Zone sélectionnée: ${zoneName}`);
-                loadZoneDetails(zoneName);
-            } else {
-                resetSelection();
-            }
-        });
-        
-        // Charger les détails d'une zone
-        function loadZoneDetails(zoneName) {
-            fetch(`/api/zone-estimation/${zoneName}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        selectZone(zoneName, data.estimation);
-                    } else {
-                        showAlert('Erreur lors du chargement des détails: ' + data.error, 'danger');
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur chargement détails zone:', error);
-                    showAlert('Erreur de communication avec le serveur', 'danger');
-                });
-        }
-        
-        // Sélectionner une zone
-        function selectZone(zoneName, zoneData) {
-            appState.selectedZone = { name: zoneName, data: zoneData };
-            
-            // Afficher les informations de la zone
-            showZoneInfo(zoneData);
-            
-            // Activer les boutons
-            document.getElementById('loadBuildingsBtn').disabled = false;
-            document.getElementById('estimateBtn').disabled = false;
-            
-            // Calculer l'estimation automatiquement
-            calculateEstimation();
-            
-            console.log('✅ Zone sélectionnée et configurée');
-        }
-        
-        // Afficher les informations de la zone
-        function showZoneInfo(zoneData) {
-            const zoneInfo = document.getElementById('zoneInfo');
-            const zoneDetails = document.getElementById('zoneDetails');
-            
-            if (!zoneData.zone_found) {
-                zoneDetails.innerHTML = '<div class="alert alert-warning">Zone non trouvée</div>';
-                zoneInfo.style.display = 'block';
+            if (percent === 0) {
+                container.style.display = 'none';
                 return;
             }
             
-            let complexityBadge = '';
-            const complexity = zoneData.complexity_level;
+            container.style.display = 'block';
+            bar.style.width = `${percent}%`;
+            percentEl.textContent = `${Math.round(percent)}%`;
+            if (text) textEl.textContent = text;
+        }
+
+        function formatNumber(num) {
+            return new Intl.NumberFormat('fr-FR').format(num);
+        }
+
+        function getComplexityBadge(complexity) {
+            const badges = {
+                low: '<span class="complexity-badge complexity-low">Faible</span>',
+                medium: '<span class="complexity-badge complexity-medium">Moyenne</span>',
+                high: '<span class="complexity-badge complexity-high">Élevée</span>'
+            };
+            return badges[complexity] || badges.medium;
+        }
+
+        // ================== GESTION DES ZONES ==================
+
+        function initializeZoneSelector() {
+            const typeSelect = document.getElementById('zone-type-select');
+            const nameSelect = document.getElementById('zone-name-select');
             
-            switch(complexity) {
-                case 'simple':
-                    complexityBadge = '<span class="badge bg-success">Simple</span>';
-                    break;
-                case 'modéré':
-                    complexityBadge = '<span class="badge bg-info">Modéré</span>';
-                    break;
-                case 'complexe':
-                    complexityBadge = '<span class="badge bg-warning">Complexe</span>';
-                    break;
-                case 'très_complexe':
-                    complexityBadge = '<span class="badge bg-danger">Très complexe</span>';
-                    break;
-                case 'extrême':
-                    complexityBadge = '<span class="badge bg-dark">Extrême</span>';
-                    break;
-                default:
-                    complexityBadge = '<span class="badge bg-secondary">Inconnu</span>';
+            typeSelect.addEventListener('change', function() {
+                const zoneType = this.value;
+                loadZonesByType(zoneType);
+            });
+            
+            nameSelect.addEventListener('change', function() {
+                const zoneId = this.value;
+                if (zoneId) {
+                    selectZone(zoneId);
+                }
+            });
+        }
+
+        async function loadZonesByType(zoneType) {
+            const nameSelect = document.getElementById('zone-name-select');
+            
+            if (!zoneType) {
+                nameSelect.innerHTML = '<option value="">Choisissez d\'abord un type</option>';
+                nameSelect.disabled = true;
+                hideZoneInfo();
+                return;
             }
             
-            zoneDetails.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <strong>Zone:</strong> ${zoneData.zone_name}<br>
-                        <strong>Type:</strong> ${zoneData.zone_type}<br>
-                        <strong>Superficie:</strong> ${zoneData.area_km2?.toLocaleString()} km²
-                    </div>
-                    <div class="col-md-6">
-                        <strong>Bâtiments estimés:</strong> ${zoneData.estimated_buildings?.toLocaleString()}<br>
-                        <strong>Complexité:</strong> ${complexityBadge}<br>
-                        <strong>Relation OSM:</strong> ${zoneData.has_osm_relation ? '✅' : '❌'}
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <small><strong>Recommandation:</strong> ${zoneData.recommendation}</small>
-                </div>
-            `;
+            try {
+                const response = await fetch(`${AppConfig.apiBase}/zones`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    const zones = data.categories[zoneType] || [];
+                    
+                    nameSelect.innerHTML = '<option value="">-- Sélectionnez une zone --</option>';
+                    zones.forEach(zone => {
+                        const option = document.createElement('option');
+                        option.value = zone.zone_id;
+                        option.textContent = `${zone.name} (${formatNumber(zone.estimated_buildings)} bâtiments)`;
+                        nameSelect.appendChild(option);
+                    });
+                    
+                    nameSelect.disabled = false;
+                    hideZoneInfo();
+                } else {
+                    showNotification('Erreur chargement zones: ' + data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de communication avec le serveur', 'error');
+            }
+        }
+
+        async function selectZone(zoneId) {
+            try {
+                const response = await fetch(`${AppConfig.apiBase}/zone-estimation/${zoneId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    appState.selectedZone = data.estimation;
+                    showZoneInfo(data.estimation);
+                    enableLoadButton();
+                } else {
+                    showNotification('Erreur: ' + data.error, 'error');
+                }
+            } catch (error) {
+                console.error('Erreur:', error);
+                showNotification('Erreur de communication', 'error');
+            }
+        }
+
+        function showZoneInfo(zone) {
+            const zoneInfo = document.getElementById('zone-info');
+            
+            document.getElementById('zone-population').textContent = formatNumber(zone.zone_name ? 'N/A' : 1800000);
+            document.getElementById('zone-area').textContent = formatNumber(zone.area_km2 || 300);
+            document.getElementById('zone-buildings').textContent = formatNumber(zone.estimated_buildings);
+            document.getElementById('zone-complexity').innerHTML = getComplexityBadge(zone.complexity_level);
+            
+            // Afficher les avertissements
+            const warningsDiv = document.getElementById('zone-warnings');
+            if (zone.warnings && zone.warnings.length > 0) {
+                warningsDiv.innerHTML = zone.warnings.map(w => `<div>⚠️ ${w}</div>`).join('');
+                warningsDiv.style.display = 'block';
+            } else {
+                warningsDiv.style.display = 'none';
+            }
             
             zoneInfo.style.display = 'block';
         }
-        
-        // Calculer l'estimation des ressources
-        function calculateEstimation() {
-            if (!appState.selectedZone) return;
-            
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            const frequency = document.getElementById('frequency').value;
-            const numBuildings = appState.selectedZone.data.estimated_buildings;
-            
-            console.log(`📊 Calcul estimation: ${numBuildings} bâtiments, ${startDate} → ${endDate}, ${frequency}`);
-            
-            fetch('/api/estimate-generation', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    num_buildings: numBuildings,
-                    start_date: startDate,
-                    end_date: endDate,
-                    frequency: frequency
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showEstimation(data.estimation);
-                } else {
-                    showAlert('Erreur lors de l\'estimation: ' + data.error, 'danger');
-                }
-            })
-            .catch(error => {
-                console.error('Erreur estimation:', error);
-                showAlert('Erreur de communication avec le serveur', 'danger');
-            });
+
+        function hideZoneInfo() {
+            document.getElementById('zone-info').style.display = 'none';
+            document.getElementById('load-buildings-btn').disabled = true;
         }
-        
-        // Afficher l'estimation
-        function showEstimation(estimation) {
-            appState.estimationData = estimation;
-            const estimationInfo = document.getElementById('estimationInfo');
-            const estimationDetails = document.getElementById('estimationDetails');
-            
-            let warningHtml = '';
-            if (estimation.complexity?.warning) {
-                warningHtml = `<div class="alert alert-warning mt-2 mb-0">${estimation.complexity.warning}</div>`;
-            }
-            
-            estimationDetails.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <strong>Observations:</strong> ${estimation.calculations?.observations_formatted}<br>
-                        <strong>Temps estimé:</strong> ${estimation.time_estimation?.human_readable}<br>
-                        <strong>Taille:</strong> ${estimation.size_estimation?.human_readable}
-                    </div>
-                    <div class="col-md-6">
-                        <strong>Complexité:</strong> <span class="badge bg-${getComplexityColor(estimation.complexity?.level)}">${estimation.complexity?.level}</span><br>
-                        <strong>Mémoire:</strong> ${estimation.size_estimation?.memory_usage_mb} MB<br>
-                        <strong>Faisabilité:</strong> ${estimation.feasibility?.is_feasible ? '✅ Oui' : '❌ Non'}
-                    </div>
-                </div>
-                ${warningHtml}
-            `;
-            
-            estimationInfo.style.display = 'block';
-            
-            console.log('✅ Estimation affichée');
+
+        function enableLoadButton() {
+            document.getElementById('load-buildings-btn').disabled = false;
         }
-        
-        // Obtenir la couleur de complexité
-        function getComplexityColor(level) {
-            const colors = {
-                'simple': 'success',
-                'modéré': 'info',
-                'complexe': 'warning',
-                'très_complexe': 'danger',
-                'extrême': 'dark'
-            };
-            return colors[level] || 'secondary';
-        }
-        
-        // Charger les bâtiments OSM
-        document.getElementById('loadBuildingsBtn').addEventListener('click', function() {
-            if (!appState.selectedZone) return;
+
+        // ================== MÉTHODES OSM ==================
+
+        function initializeMethodSelector() {
+            const methodOptions = document.querySelectorAll('.method-option');
             
-            console.log('🏗️ Début chargement bâtiments OSM...');
-            showLoading('Chargement des bâtiments OSM...');
-            
-            fetch(`/api/osm-buildings/${appState.selectedZone.name}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                
-                if (data.success) {
-                    appState.buildingsLoaded = true;
-                    appState.buildingsData = data.buildings;
-                    document.getElementById('generateBtn').disabled = false;
-                    
-                    showAlert(`✅ ${data.buildings.length.toLocaleString()} bâtiments chargés avec succès!`, 'success');
-                    console.log(`✅ ${data.buildings.length} bâtiments chargés`);
-                } else {
-                    showAlert('Erreur lors du chargement: ' + data.error, 'danger');
-                }
-            })
-            .catch(error => {
-                hideLoading();
-                console.error('Erreur chargement:', error);
-                showAlert('Erreur de communication avec le serveur', 'danger');
-            });
-        });
-        
-        // Générer les données
-        document.getElementById('generateBtn').addEventListener('click', function() {
-            if (!appState.buildingsLoaded) {
-                showAlert('Veuillez d\'abord charger les bâtiments OSM', 'warning');
-                return;
-            }
-            
-            const startDate = document.getElementById('startDate').value;
-            const endDate = document.getElementById('endDate').value;
-            const frequency = document.getElementById('frequency').value;
-            
-            console.log('⚡ Début génération des données...');
-            showLoading('Génération des données électriques...');
-            
-            fetch('/api/generate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    zone_name: appState.selectedZone.name,
-                    buildings_osm: appState.buildingsData,
-                    start_date: startDate,
-                    end_date: endDate,
-                    frequency: frequency
-                })
-            })
-            .then(response => response.json())
-            .then(data => {
-                hideLoading();
-                
-                if (data.success) {
-                    showGenerationResults(data);
-                    showAlert('✅ Génération terminée avec succès!', 'success');
-                    console.log('✅ Génération terminée');
-                } else {
-                    showAlert('Erreur lors de la génération: ' + (data.error || 'Erreur inconnue'), 'danger');
-                    if (data.details) {
-                        console.error('Détails erreur:', data.details);
-                    }
-                }
-            })
-            .catch(error => {
-                hideLoading();
-                console.error('Erreur génération:', error);
-                showAlert('Erreur de communication avec le serveur', 'danger');
-            });
-        });
-        
-        // Calculer estimation (bouton)
-        document.getElementById('estimateBtn').addEventListener('click', calculateEstimation);
-        
-        // Afficher les résultats de génération
-        function showGenerationResults(data) {
-            const resultsDiv = document.getElementById('generationResults');
-            const resultsContent = document.getElementById('resultsContent');
-            
-            const stats = data.statistics;
-            
-            resultsContent.innerHTML = `
-                <div class="row text-center">
-                    <div class="col-md-3">
-                        <h4 class="text-primary">${stats.total_buildings?.toLocaleString()}</h4>
-                        <small>Bâtiments</small>
-                    </div>
-                    <div class="col-md-3">
-                        <h4 class="text-success">${stats.total_observations?.toLocaleString()}</h4>
-                        <small>Observations</small>
-                    </div>
-                    <div class="col-md-3">
-                        <h4 class="text-info">${stats.date_range?.frequency}</h4>
-                        <small>Fréquence</small>
-                    </div>
-                    <div class="col-md-3">
-                        <h4 class="text-warning">${Math.round(stats.quality_metrics?.overall_score || 0)}</h4>
-                        <small>Score Qualité</small>
-                    </div>
-                </div>
-                
-                <hr>
-                
-                <div class="row mt-3">
-                    <div class="col-md-6">
-                        <h6>Résumé de génération</h6>
-                        <ul class="list-unstyled">
-                            <li><strong>Zone:</strong> ${data.zone_name}</li>
-                            <li><strong>Période:</strong> ${stats.date_range?.start} → ${stats.date_range?.end}</li>
-                            <li><strong>Durée:</strong> ${stats.date_range?.duration_days || 'N/A'} jours</li>
-                        </ul>
-                    </div>
-                    <div class="col-md-6">
-                        <h6>Qualité des données</h6>
-                        <div class="progress mb-2">
-                            <div class="progress-bar" role="progressbar" style="width: ${stats.quality_metrics?.overall_score || 0}%">
-                                ${Math.round(stats.quality_metrics?.overall_score || 0)}%
-                            </div>
-                        </div>
-                        <small class="text-muted">Score de qualité global</small>
-                    </div>
-                </div>
-            `;
-            
-            resultsDiv.style.display = 'block';
-            
-            // Préparer les liens de téléchargement
-            showDownloadOptions(data);
-        }
-        
-        // Afficher les options de téléchargement
-        function showDownloadOptions(data) {
-            const downloadSection = document.getElementById('downloadSection');
-            const downloadLinks = document.getElementById('downloadLinks');
-            
-            downloadLinks.innerHTML = `
-                <div class="row">
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-body text-center">
-                                <i class="fas fa-building fa-2x text-primary mb-2"></i>
-                                <h6>Données des Bâtiments</h6>
-                                <p class="small text-muted">${data.statistics.total_buildings} bâtiments</p>
-                                <button class="btn btn-primary btn-sm" onclick="exportData('buildings')">
-                                    <i class="fas fa-download"></i> Télécharger CSV
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card">
-                            <div class="card-body text-center">
-                                <i class="fas fa-chart-line fa-2x text-success mb-2"></i>
-                                <h6>Séries Temporelles</h6>
-                                <p class="small text-muted">${data.statistics.total_observations?.toLocaleString()} observations</p>
-                                <button class="btn btn-success btn-sm" onclick="exportData('timeseries')">
-                                    <i class="fas fa-download"></i> Télécharger CSV
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="text-center mt-3">
-                    <button class="btn btn-info" onclick="exportData('complete')">
-                        <i class="fas fa-archive"></i> Télécharger Dataset Complet
-                    </button>
-                </div>
-            `;
-            
-            downloadSection.style.display = 'block';
-            
-            // Stocker les données pour l'export
-            window.generationData = data;
-            
-            console.log('✅ Options de téléchargement affichées');
-        }
-        
-        // Exporter les données
-        function exportData(type) {
-            if (!window.generationData) {
-                showAlert('Aucune donnée à exporter', 'warning');
-                return;
-            }
-            
-            const data = window.generationData;
-            let exportData = {};
-            
-            console.log(`📁 Export demandé: ${type}`);
-            
-            switch(type) {
-                case 'buildings':
-                    exportData = {
-                        buildings: data.buildings_data,
-                        timeseries: [],
-                        formats: ['csv'],
-                        filename_prefix: `${data.zone_name}_buildings`
-                    };
-                    break;
-                    
-                case 'timeseries':
-                    exportData = {
-                        buildings: [],
-                        timeseries: data.timeseries_data,
-                        formats: ['csv'],
-                        filename_prefix: `${data.zone_name}_timeseries`
-                    };
-                    break;
-                    
-                case 'complete':
-                    exportData = {
-                        buildings: data.buildings_data,
-                        timeseries: data.timeseries_data,
-                        formats: ['csv'],
-                        filename_prefix: `${data.zone_name}_complete`
-                    };
-                    break;
-            }
-            
-            showLoading('Préparation de l\'export...');
-            
-            fetch('/api/export', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(exportData)
-            })
-            .then(response => response.json())
-            .then(result => {
-                hideLoading();
-                
-                if (result.success) {
-                    showAlert('✅ Export préparé avec succès!', 'success');
-                    
-                    // Créer les liens de téléchargement
-                    result.files_created.forEach(filename => {
-                        const link = document.createElement('a');
-                        link.href = `/api/download/${filename}`;
-                        link.download = filename;
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
+            methodOptions.forEach(option => {
+                option.addEventListener('click', function() {
+                    // Désélectionner toutes les options
+                    methodOptions.forEach(opt => {
+                        opt.classList.remove('selected');
+                        opt.querySelector('.fa-check-circle').style.display = 'none';
                     });
                     
-                    console.log(`✅ ${result.files_created.length} fichiers téléchargés`);
-                } else {
-                    showAlert('Erreur lors de l\'export: ' + result.error, 'danger');
-                }
-            })
-            .catch(error => {
-                hideLoading();
-                console.error('Erreur export:', error);
-                showAlert('Erreur de communication avec le serveur', 'danger');
+                    // Sélectionner cette option
+                    this.classList.add('selected');
+                    this.querySelector('.fa-check-circle').style.display = 'block';
+                    
+                    appState.selectedMethod = this.dataset.method;
+                });
             });
-        }
-        
-        // Réinitialiser la sélection
-        function resetSelection() {
-            appState.selectedZone = null;
-            appState.buildingsLoaded = false;
-            appState.buildingsData = [];
             
-            document.getElementById('zoneInfo').style.display = 'none';
-            document.getElementById('estimationInfo').style.display = 'none';
-            document.getElementById('generationResults').style.display = 'none';
-            document.getElementById('downloadSection').style.display = 'none';
-            
-            document.getElementById('loadBuildingsBtn').disabled = true;
-            document.getElementById('generateBtn').disabled = true;
-            document.getElementById('estimateBtn').disabled = true;
-            
-            console.log('🔄 Sélection réinitialisée');
-        }
-        
-        // Afficher le spinner de chargement
-        function showLoading(message) {
-            const spinner = document.getElementById('loadingSpinner');
-            const progressBar = document.getElementById('progressBar');
-            const loadingMessage = document.getElementById('loadingMessage');
-            
-            loadingMessage.textContent = message;
-            spinner.style.display = 'block';
-            
-            // Animation de la barre de progression
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += Math.random() * 15;
-                if (progress > 85) progress = 85;
-                progressBar.style.width = progress + '%';
-            }, 300);
-            
-            spinner.progressInterval = interval;
-            
-            console.log(`⏳ Loading: ${message}`);
-        }
-        
-        // Masquer le spinner de chargement
-        function hideLoading() {
-            const spinner = document.getElementById('loadingSpinner');
-            const progressBar = document.getElementById('progressBar');
-            
-            if (spinner.progressInterval) {
-                clearInterval(spinner.progressInterval);
+            // Sélectionner la méthode par défaut
+            const defaultOption = document.querySelector('[data-method="administrative"]');
+            if (defaultOption) {
+                defaultOption.click();
             }
-            
-            progressBar.style.width = '100%';
-            
-            setTimeout(() => {
-                spinner.style.display = 'none';
-                progressBar.style.width = '0%';
-            }, 800);
-            
-            console.log('✅ Loading terminé');
         }
-        
-        // Afficher une alerte
-        function showAlert(message, type) {
-            const container = document.getElementById('alertContainer');
+
+        // ================== CHARGEMENT OSM ==================
+
+        async function loadOSMBuildings() {
+            if (!appState.selectedZone) {
+                showNotification('Veuillez sélectionner une zone', 'error');
+                return;
+            }
+
+            const loadBtn = document.getElementById('load-buildings-btn');
+            const originalText = loadBtn.innerHTML;
             
-            const alertId = 'alert_' + Date.now();
-            const alert = document.createElement('div');
-            alert.id = alertId;
-            alert.className = `alert alert-${type} alert-dismissible fade show`;
-            alert.innerHTML = `
-                ${message}
-                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+            try {
+                loadBtn.disabled = true;
+                loadBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Chargement...';
+                
+                showLoading(true, 'Chargement des bâtiments OSM', 'Utilisation de la méthode corrigée...');
+                updateProgress(10, 'Initialisation de la requête OSM...');
+
+                // Simulation du progrès
+                const progressInterval = setInterval(() => {
+                    const currentProgress = parseInt(document.getElementById('progress-bar').style.width) || 10;
+                    if (currentProgress < 90) {
+                        updateProgress(currentProgress + Math.random() * 15, 'Récupération des données OSM...');
+                    }
+                }, 1500);
+
+                // Appel API avec la nouvelle méthode corrigée
+                const response = await fetch(`${AppConfig.apiBase}/osm-buildings/${appState.selectedZone.zone_name}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        method: appState.selectedMethod
+                    })
+                });
+
+                clearInterval(progressInterval);
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateProgress(100, 'Chargement terminé avec succès!');
+                    
+                    setTimeout(() => {
+                        showLoadingResults(data);
+                        updateProgress(0);
+                        showLoading(false);
+                    }, 1000);
+                    
+                    appState.loadedBuildings = data.buildings;
+                    document.getElementById('buildings-count').textContent = formatNumber(data.buildings.length);
+                    
+                    showNotification(`${formatNumber(data.buildings.length)} bâtiments chargés avec succès!`, 'success');
+                    
+                    // Afficher la section de génération
+                    document.getElementById('generation-section').style.display = 'block';
+                    
+                } else {
+                    throw new Error(data.error || 'Erreur inconnue lors du chargement');
+                }
+
+            } catch (error) {
+                console.error('Erreur chargement OSM:', error);
+                updateProgress(0);
+                showLoading(false);
+                showNotification(`Erreur: ${error.message}`, 'error');
+                
+                // Proposer des solutions de fallback
+                showFallbackOptions(error.message);
+                
+            } finally {
+                loadBtn.disabled = false;
+                loadBtn.innerHTML = originalText;
+            }
+        }
+
+        function showLoadingResults(data) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsContent = document.getElementById('results-content');
+            
+            resultsContent.innerHTML = `
+                <div class="zone-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.buildings.length)}</div>
+                        <div class="stat-label">Bâtiments Chargés</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.metadata.query_time_seconds.toFixed(1)}s</div>
+                        <div class="stat-label">Temps de Chargement</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.metadata.quality_metrics.quality_score.toFixed(1)}%</div>
+                        <div class="stat-label">Qualité des Données</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.metadata.coverage_complete ? 'Complète' : 'Partielle'}</div>
+                        <div class="stat-label">Couverture</div>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <div class="alert alert-success">
+                        <strong><i class="fas fa-check-circle"></i> Succès!</strong><br>
+                        Méthode utilisée: <strong>${data.metadata.method_used}</strong><br>
+                        Couverture: <strong>${data.metadata.coverage_complete ? 'COMPLÈTE - Tous les bâtiments de la localité' : 'Partielle - Possibles zones manquées'}</strong>
+                    </div>
+                </div>
             `;
             
-            container.appendChild(alert);
-            
-            // Auto-dismiss après 8 secondes
-            setTimeout(() => {
-                const alertElement = document.getElementById(alertId);
-                if (alertElement && alertElement.parentNode) {
-                    alertElement.remove();
-                }
-            }, 8000);
-            
-            console.log(`🔔 Alert [${type}]: ${message}`);
+            resultsContainer.style.display = 'block';
+            resultsContainer.scrollIntoView({ behavior: 'smooth' });
         }
-        
-        // Gestionnaires d'événements pour mise à jour automatique de l'estimation
-        ['startDate', 'endDate', 'frequency'].forEach(id => {
-            document.getElementById(id).addEventListener('change', () => {
-                if (appState.selectedZone) {
-                    setTimeout(calculateEstimation, 500); // Délai pour éviter trop de requêtes
-                }
-            });
-        });
-        
-        // Initialisation au chargement de la page
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Initialisation de l\'application Malaysia Electricity Generator');
+
+        function showFallbackOptions(errorMessage) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsContent = document.getElementById('results-content');
             
-            // Initialiser la carte
-            try {
-                initMap();
-            } catch (error) {
-                console.error('Erreur initialisation carte:', error);
-                showAlert('Erreur lors du chargement de la carte', 'warning');
+            resultsContent.innerHTML = `
+                <div class="alert alert-warning">
+                    <h6><i class="fas fa-exclamation-triangle"></i> Options de Récupération Alternative</h6>
+                    <p><strong>Erreur:</strong> ${errorMessage}</p>
+                    <p>Essayez ces alternatives :</p>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-outline-warning btn-sm" onclick="retryWithBbox()">
+                            <i class="fas fa-square"></i> Essayer avec Bbox
+                        </button>
+                        <button class="btn btn-outline-info btn-sm" onclick="retryWithHybrid()">
+                            <i class="fas fa-layer-group"></i> Essayer Hybride
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" onclick="loadSampleData()">
+                            <i class="fas fa-download"></i> Données d'Exemple
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            resultsContainer.style.display = 'block';
+        }
+
+        // ================== FONCTIONS DE FALLBACK ==================
+
+        async function retryWithBbox() {
+            appState.selectedMethod = 'bbox';
+            document.querySelector('[data-method="bbox"]').click();
+            showNotification('Nouvelle tentative avec la méthode Rectangle Géographique...', 'info');
+            await loadOSMBuildings();
+        }
+
+        async function retryWithHybrid() {
+            appState.selectedMethod = 'hybrid';
+            document.querySelector('[data-method="hybrid"]').click();
+            showNotification('Nouvelle tentative avec la méthode Hybride...', 'info');
+            await loadOSMBuildings();
+        }
+
+        function loadSampleData() {
+            // Générer des données d'exemple
+            const sampleBuildings = generateSampleBuildings();
+            
+            appState.loadedBuildings = sampleBuildings;
+            document.getElementById('buildings-count').textContent = formatNumber(sampleBuildings.length);
+            
+            const mockData = {
+                buildings: sampleBuildings,
+                metadata: {
+                    query_time_seconds: 2.5,
+                    quality_metrics: { quality_score: 78 },
+                    coverage_complete: false,
+                    method_used: 'sample_data'
+                }
+            };
+            
+            showLoadingResults(mockData);
+            document.getElementById('generation-section').style.display = 'block';
+            showNotification(`${formatNumber(sampleBuildings.length)} bâtiments d'exemple chargés`, 'warning');
+        }
+
+        function generateSampleBuildings() {
+            const sampleCount = 500;
+            const buildings = [];
+            
+            // Coordonnées approximatives pour Kuala Lumpur
+            const baseLat = 3.1390;
+            const baseLng = 101.6869;
+            
+            for (let i = 0; i < sampleCount; i++) {
+                buildings.push({
+                    id: `sample_${i}`,
+                    osm_id: `sample_${i}`,
+                    latitude: baseLat + (Math.random() - 0.5) * 0.1,
+                    longitude: baseLng + (Math.random() - 0.5) * 0.1,
+                    building_type: ['residential', 'commercial', 'office', 'retail'][Math.floor(Math.random() * 4)],
+                    surface_area_m2: Math.floor(Math.random() * 500 + 50),
+                    base_consumption_kwh: Math.floor(Math.random() * 1000 + 100),
+                    zone_name: 'Sample Zone'
+                });
             }
             
-            // Vérifier le statut de l'API
-            fetch('/api/status')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.healthy) {
-                        showAlert('✅ Application prête à l\'utilisation', 'success');
-                        console.log('✅ API status: OK');
-                    } else {
-                        showAlert('⚠️ Certains services peuvent être indisponibles', 'warning');
-                        console.warn('⚠️ API status: Degraded');
-                    }
-                })
-                .catch(error => {
-                    console.error('Erreur statut API:', error);
-                    showAlert('❌ Impossible de vérifier le statut des services', 'warning');
+            return buildings;
+        }
+
+        // ================== ESTIMATION DE COMPLEXITÉ ==================
+
+        async function estimateComplexity() {
+            if (!appState.selectedZone) {
+                showNotification('Veuillez sélectionner une zone', 'error');
+                return;
+            }
+
+            showLoading(true, 'Estimation de la complexité', 'Analyse de la zone sélectionnée...');
+
+            setTimeout(() => {
+                const estimation = calculateComplexityEstimation();
+                showComplexityResults(estimation);
+                showLoading(false);
+                showNotification('Estimation de complexité terminée', 'success');
+            }, 2000);
+        }
+
+        function calculateComplexityEstimation() {
+            const zone = appState.selectedZone;
+            const buildings = zone.estimated_buildings;
+            
+            let timeEstimate, complexity, recommendations = [];
+
+            if (buildings < 10000) {
+                timeEstimate = '30 secondes - 2 minutes';
+                complexity = 'low';
+                recommendations.push('Chargement rapide recommandé');
+            } else if (buildings < 100000) {
+                timeEstimate = '2 - 8 minutes';
+                complexity = 'medium';
+                recommendations.push('Préparez-vous à attendre quelques minutes');
+                recommendations.push('La méthode administrative est recommandée');
+            } else {
+                timeEstimate = '8 - 20 minutes';
+                complexity = 'high';
+                recommendations.push('Chargement très long - soyez patient');
+                recommendations.push('Considérez diviser la zone en sous-régions');
+                recommendations.push('La méthode hybride peut être plus fiable');
+            }
+
+            return {
+                timeEstimate,
+                complexity,
+                recommendations,
+                dataSize: `${Math.round(buildings * 0.002)} MB estimés`,
+                serverLoad: complexity === 'high' ? 'Élevée' : complexity === 'medium' ? 'Modérée' : 'Faible'
+            };
+        }
+
+        function showComplexityResults(estimation) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsContent = document.getElementById('results-content');
+            
+            resultsContent.innerHTML = `
+                <div class="alert alert-info">
+                    <h6><i class="fas fa-chart-line"></i> Estimation de Complexité</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Temps estimé :</strong> ${estimation.timeEstimate}</p>
+                            <p><strong>Complexité :</strong> ${getComplexityBadge(estimation.complexity)}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Taille des données :</strong> ${estimation.dataSize}</p>
+                            <p><strong>Charge serveur :</strong> ${estimation.serverLoad}</p>
+                        </div>
+                    </div>
+                    <div class="mt-2">
+                        <strong>Recommandations :</strong>
+                        <ul class="mb-0">
+                            ${estimation.recommendations.map(rec => `<li>${rec}</li>`).join('')}
+                        </ul>
+                    </div>
+                </div>
+            `;
+            
+            resultsContainer.style.display = 'block';
+        }
+
+        // ================== GÉNÉRATION DE DONNÉES ÉLECTRIQUES ==================
+
+        async function generateElectricalData() {
+            if (!appState.loadedBuildings || appState.loadedBuildings.length === 0) {
+                showNotification('Aucun bâtiment chargé. Chargez d\'abord les données OSM.', 'error');
+                return;
+            }
+
+            const generateBtn = document.getElementById('generate-btn');
+            const originalText = generateBtn.innerHTML;
+
+            try {
+                generateBtn.disabled = true;
+                generateBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Génération...';
+
+                showLoading(true, 'Génération des données électriques', 'Calcul de la consommation pour chaque bâtiment...');
+
+                const requestData = {
+                    zone_name: appState.selectedZone.zone_name || 'Zone sélectionnée',
+                    buildings_osm: appState.loadedBuildings,
+                    start_date: document.getElementById('start-date').value,
+                    end_date: document.getElementById('end-date').value,
+                    frequency: document.getElementById('frequency').value
+                };
+
+                const response = await fetch(`${AppConfig.apiBase}/generate`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
                 });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showGenerationResults(data);
+                    appState.generatedData = data;
+                    showNotification('Données électriques générées avec succès!', 'success');
+                } else {
+                    throw new Error(data.error || 'Erreur de génération');
+                }
+
+            } catch (error) {
+                console.error('Erreur génération:', error);
+                showNotification(`Erreur: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+                generateBtn.disabled = false;
+                generateBtn.innerHTML = originalText;
+            }
+        }
+
+        function showGenerationResults(data) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsContent = document.getElementById('results-content');
             
-            // Définir les dates par défaut
-            const today = new Date();
-            const startOfMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-            const endOfMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+            resultsContent.innerHTML = `
+                <h5><i class="fas fa-bolt"></i> Données Électriques Générées</h5>
+                <div class="zone-stats">
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.generation_metadata.buildings_count)}</div>
+                        <div class="stat-label">Bâtiments Traités</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${formatNumber(data.generation_metadata.total_points)}</div>
+                        <div class="stat-label">Points de Données</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.statistics.generation_time}</div>
+                        <div class="stat-label">Temps de Génération</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value">${data.statistics.frequency}</div>
+                        <div class="stat-label">Fréquence</div>
+                    </div>
+                </div>
+                
+                <div class="mt-4">
+                    <h6>Aperçu des Données:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>ID Bâtiment</th>
+                                    <th>Type</th>
+                                    <th>Consommation (kWh)</th>
+                                    <th>Timestamp</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.data_preview.slice(0, 5).map(row => `
+                                    <tr>
+                                        <td>${row.building_id}</td>
+                                        <td>${row.building_type}</td>
+                                        <td>${row.consumption_kwh}</td>
+                                        <td>${new Date(row.timestamp).toLocaleString()}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <div class="mt-4 text-center">
+                    <h6>Télécharger les Données:</h6>
+                    <div class="d-flex gap-3 justify-content-center flex-wrap">
+                        <button class="btn btn-success" onclick="exportData(['csv'])">
+                            <i class="fas fa-file-csv"></i> CSV
+                        </button>
+                        <button class="btn btn-primary" onclick="exportData(['json'])">
+                            <i class="fas fa-file-code"></i> JSON
+                        </button>
+                        <button class="btn btn-info" onclick="exportData(['excel'])">
+                            <i class="fas fa-file-excel"></i> Excel
+                        </button>
+                        <button class="btn btn-warning" onclick="exportData(['csv', 'json', 'excel'])">
+                            <i class="fas fa-download"></i> Tous les Formats
+                        </button>
+                    </div>
+                </div>
+            `;
             
-            document.getElementById('startDate').value = startOfMonth.toISOString().split('T')[0];
-            document.getElementById('endDate').value = endOfMonth.toISOString().split('T')[0];
+            resultsContainer.style.display = 'block';
+            resultsContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // ================== EXPORT DE DONNÉES ==================
+
+        async function exportData(formats) {
+            if (!appState.generatedData) {
+                showNotification('Aucune donnée générée à exporter', 'error');
+                return;
+            }
+
+            try {
+                showLoading(true, 'Export en cours', 'Génération des fichiers...');
+
+                const response = await fetch(`${AppConfig.apiBase}/export`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        formats: formats,
+                        filename_prefix: 'malaysia_electricity_data'
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showExportResults(data);
+                    showNotification(`Export terminé: ${data.exported_files.length} fichier(s) généré(s)`, 'success');
+                } else {
+                    throw new Error(data.error || 'Erreur d\'export');
+                }
+
+            } catch (error) {
+                console.error('Erreur export:', error);
+                showNotification(`Erreur export: ${error.message}`, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        function showExportResults(data) {
+            const resultsContainer = document.getElementById('results-container');
+            const resultsContent = document.getElementById('results-content');
             
-            console.log('✅ Application initialisée avec succès');
+            const currentContent = resultsContent.innerHTML;
+            
+            resultsContent.innerHTML = currentContent + `
+                <div class="mt-4 alert alert-success">
+                    <h6><i class="fas fa-check-circle"></i> Export Terminé</h6>
+                    <p><strong>Fichiers générés:</strong></p>
+                    <div class="list-group">
+                        ${data.exported_files.map(file => `
+                            <div class="list-group-item d-flex justify-content-between align-items-center">
+                                <span>
+                                    <i class="fas fa-file"></i> ${file.filename}
+                                    <small class="text-muted">(${file.size_mb} MB)</small>
+                                </span>
+                                <a href="${AppConfig.apiBase}/download/${file.filename}" 
+                                   class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-download"></i> Télécharger
+                                </a>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <p class="mt-2 mb-0">
+                        <strong>Taille totale:</strong> ${data.total_size_mb} MB
+                    </p>
+                </div>
+            `;
+        }
+
+        // ================== INITIALISATION ==================
+
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Initialisation Malaysia Electricity Generator v2.0');
+            
+            // Initialiser les composants
+            initializeZoneSelector();
+            initializeMethodSelector();
+            
+            // Gestionnaires d'événements
+            document.getElementById('load-buildings-btn').addEventListener('click', loadOSMBuildings);
+            document.getElementById('estimate-btn').addEventListener('click', estimateComplexity);
+            document.getElementById('generate-btn').addEventListener('click', generateElectricalData);
+            
+            // Mise à jour du statut
+            document.getElementById('status-text').textContent = 'Application prête - Sélectionnez une zone';
+            
+            showNotification('🇲🇾 Malaysia Electricity Generator v2.0 - Avec récupération OSM corrigée!', 'success');
+            
+            console.log('✅ Application prête');
         });
-        
-        // Rendre les fonctions globales pour les boutons
-        window.exportData = exportData;
-        window.selectZone = selectZone;
-        window.calculateEstimation = calculateEstimation;
-        
-        // Gestion des erreurs globales
-        window.addEventListener('error', function(e) {
-            console.error('Erreur JavaScript:', e.error);
-            showAlert('Une erreur inattendue s\'est produite', 'danger');
-        });
-        
-        // Gestion des erreurs de requêtes
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('Promesse rejetée:', e.reason);
-            showAlert('Erreur de communication avec le serveur', 'danger');
-        });
-        
-        console.log('📋 Interface Malaysia Electricity Generator entièrement chargée');
     </script>
 </body>
 </html>

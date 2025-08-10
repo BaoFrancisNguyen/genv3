@@ -89,7 +89,7 @@ class GenerationConfig:
     }
     
     # Limites de génération
-    MAX_BUILDINGS = 10000
+    MAX_BUILDINGS = 10000000
     MAX_DAYS = 365
     MIN_BUILDINGS = 1
     MIN_DAYS = 1

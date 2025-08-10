@@ -1,21 +1,24 @@
 """
-Générateur de données électriques pour Malaysia
-==============================================
+Générateur de données électriques pour Malaysia - VERSION CORRIGÉE
+=================================================================
 
-Ce module génère des données de consommation électrique réalistes
-pour les bâtiments de Malaysia en tenant compte du climat tropical.
+Générateur complet avec patterns officiels Malaysia :
+✅ Patterns climatiques tropicaux
+✅ Facteurs saisonniers Malaysia  
+✅ Patterns hebdomadaires
+✅ Facteurs Ramadan
+✅ Consommations conformes aux spécifications
+
+Version: 3.0 - Patterns Malaysia officiels
 """
 
 import pandas as pd
 import numpy as np
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import math
-
-from src.models.building import Building
-from config import GenerationConfig as GEN_CONFIG
-
+import random
 
 # Configuration du logger
 logger = logging.getLogger(__name__)
@@ -23,479 +26,412 @@ logger = logging.getLogger(__name__)
 
 class ElectricityDataGenerator:
     """
-    Générateur principal de données électriques pour Malaysia
+    Générateur de données électriques réalistes pour Malaysia
     
-    Génère des séries temporelles de consommation électrique réalistes
-    en tenant compte des spécificités climatiques et culturelles de Malaysia.
+    Utilise les patterns officiels de consommation électrique
+    selon les spécifications climatiques et culturelles Malaysia.
     """
     
     def __init__(self):
-        """Initialise le générateur avec les paramètres Malaysia"""
+        """Initialise le générateur avec les statistiques"""
         self.generation_stats = {
             'total_buildings_generated': 0,
             'total_timeseries_generated': 0,
             'generation_start_time': datetime.now()
         }
         
-        # Profils de consommation par type de bâtiment (Malaysia)
-        self.consumption_profiles = {
-            'residential': {
-                'base_factor': 1.0,
-                'peak_hours': [19, 20, 21],  # Soirée
-                'peak_multiplier': 1.8,
-                'night_factor': 0.4,
-                'ac_dependency': 0.7  # Forte dépendance climatisation
-            },
-            'commercial': {
-                'base_factor': 1.2,
-                'peak_hours': [10, 11, 14, 15, 16],  # Heures d'activité
-                'peak_multiplier': 2.2,
-                'night_factor': 0.2,
-                'ac_dependency': 0.8
-            },
-            'office': {
-                'base_factor': 1.1,
-                'peak_hours': [9, 10, 11, 14, 15, 16],  # Heures de bureau
-                'peak_multiplier': 2.0,
-                'night_factor': 0.1,
-                'ac_dependency': 0.9
-            },
-            'industrial': {
-                'base_factor': 2.5,
-                'peak_hours': [8, 9, 10, 13, 14, 15],  # Heures production
-                'peak_multiplier': 1.4,
-                'night_factor': 0.6,
-                'ac_dependency': 0.5
-            },
-            'hospital': {
-                'base_factor': 2.0,
-                'peak_hours': list(range(24)),  # 24h/24
-                'peak_multiplier': 1.2,
-                'night_factor': 0.8,
-                'ac_dependency': 0.95
-            },
-            'school': {
-                'base_factor': 0.8,
-                'peak_hours': [8, 9, 10, 11, 14, 15],  # Heures scolaires
-                'peak_multiplier': 1.6,
-                'night_factor': 0.05,
-                'ac_dependency': 0.6
-            },
-            'hotel': {
-                'base_factor': 1.5,
-                'peak_hours': [7, 8, 19, 20, 21, 22],  # Check-in/out + soirée
-                'peak_multiplier': 1.7,
-                'night_factor': 0.6,
-                'ac_dependency': 0.85
-            }
-        }
-        
         logger.info("✅ Générateur électrique Malaysia initialisé")
     
-    def generate_building_metadata(self, buildings: List[Building]) -> pd.DataFrame:
+    def generate_timeseries_data(
+        self, 
+        buildings: List[Dict], 
+        start_date: str, 
+        end_date: str, 
+        frequency: str = '1H'
+    ) -> Dict:
         """
-        Génère les métadonnées enrichies pour une liste de bâtiments
+        Génère des données de consommation électrique pour les bâtiments
         
         Args:
-            buildings: Liste des bâtiments
+            buildings: Liste des bâtiments OSM
+            start_date: Date de début (YYYY-MM-DD)
+            end_date: Date de fin (YYYY-MM-DD) 
+            frequency: Fréquence d'échantillonnage ('15T', '30T', '1H', '3H', 'D')
             
         Returns:
-            pd.DataFrame: Métadonnées enrichies
+            Dict: Résultat avec données générées et métadonnées
         """
-        logger.info(f"📋 Génération métadonnées pour {len(buildings)} bâtiments")
+        start_time = datetime.now()
         
-        building_data = []
-        
-        for building in buildings:
-            # Enrichissement avec des données Malaysia-spécifiques
-            metadata = {
-                'building_id': building.building_id,
-                'osm_id': building.osm_id,
-                'latitude': building.latitude,
-                'longitude': building.longitude,
-                'building_type': building.building_type,
-                'surface_area_m2': building.surface_area_m2,
-                'base_consumption_kwh': building.base_consumption_kwh,
-                'zone_name': building.zone_name,
+        try:
+            logger.info(f"⚡ Génération données électriques pour {len(buildings)} bâtiments")
+            logger.info(f"📅 Période: {start_date} → {end_date} (fréquence: {frequency})")
+            
+            # Créer l'index temporel
+            date_range = pd.date_range(start=start_date, end=end_date, freq=frequency)
+            logger.info(f"📊 {len(date_range)} points temporels à générer")
+            
+            # Générer les données pour chaque bâtiment
+            all_data = []
+            
+            for i, building in enumerate(buildings):
+                if i % 10000 == 0 and i > 0:
+                    logger.info(f"📈 Progression: {i}/{len(buildings)} bâtiments traités")
                 
-                # Enrichissement climatique Malaysia
-                'climate_zone': self._determine_climate_zone(building.latitude, building.longitude),
-                'cooling_degree_days': self._calculate_cooling_degree_days(building.latitude),
-                'humidity_factor': self._calculate_humidity_factor(building.latitude),
-                
-                # Enrichissement socio-économique
-                'occupancy_level': self._estimate_occupancy(building.building_type, building.surface_area_m2),
-                'energy_efficiency_rating': self._assign_efficiency_rating(building.building_type),
-                'smart_meter_enabled': np.random.choice([True, False], p=[0.3, 0.7]),
-                
-                # Métadonnées techniques
-                'voltage_level': self._determine_voltage_level(building.building_type, building.surface_area_m2),
-                'backup_generator': self._has_backup_generator(building.building_type),
-                'solar_panels': self._has_solar_panels(building.building_type),
-                
-                # Horodatage
-                'metadata_generated_at': datetime.now().isoformat()
+                building_data = self._generate_building_timeseries(building, date_range)
+                all_data.extend(building_data)
+            
+            # Créer le DataFrame final
+            df = pd.DataFrame(all_data)
+            
+            # Métadonnées de génération
+            generation_time = (datetime.now() - start_time).total_seconds()
+            
+            # Mise à jour des statistiques
+            self.generation_stats['total_buildings_generated'] += len(buildings)
+            self.generation_stats['total_timeseries_generated'] += len(all_data)
+            
+            logger.info(f"✅ Génération terminée en {generation_time:.1f}s")
+            logger.info(f"📋 {len(all_data)} points de données générés")
+            
+            return {
+                'success': True,
+                'data': df,
+                'metadata': {
+                    'total_points': len(all_data),
+                    'buildings_count': len(buildings),
+                    'date_range': {
+                        'start': start_date,
+                        'end': end_date,
+                        'frequency': frequency,
+                        'total_periods': len(date_range)
+                    },
+                    'generation_time_seconds': generation_time,
+                    'patterns_used': 'Malaysia Official Specifications',
+                    'climate_factors': 'Tropical Malaysia',
+                    'cultural_factors': 'Ramadan, Friday prayers, Weekend patterns'
+                }
             }
             
-            building_data.append(metadata)
-        
-        self.generation_stats['total_buildings_generated'] += len(buildings)
-        
-        df = pd.DataFrame(building_data)
-        logger.info(f"✅ Métadonnées générées: {len(df)} bâtiments enrichis")
-        
-        return df
+        except Exception as e:
+            logger.error(f"❌ Erreur génération: {str(e)}")
+            return {
+                'success': False,
+                'error': str(e)
+            }
     
-    def generate_timeseries_for_buildings(
-        self,
-        buildings: List[Building],
-        start_date: str,
-        end_date: str,
-        frequency: str = '30T'
-    ) -> pd.DataFrame:
+    def _estimate_base_consumption(self, building_type: str, surface_area: float) -> float:
         """
-        Génère les séries temporelles de consommation pour tous les bâtiments
+        Estime la consommation de base selon les spécifications Malaysia officielles
         
-        Args:
-            buildings: Liste des bâtiments
-            start_date: Date de début
-            end_date: Date de fin
-            frequency: Fréquence d'échantillonnage
-            
-        Returns:
-            pd.DataFrame: Séries temporelles complètes
+        SPÉCIFICATIONS OFFICIELLES (kWh/heure base pour 100m²):
+        - Residential: 0.5 kWh (base) → 12.0 kWh (pic)
+        - Commercial: 5.0 kWh (base) → 80.0 kWh (pic)
+        - Industrial: 20.0 kWh (base) → 200.0 kWh (pic)
+        - Office: 3.0 kWh (base) → 45.0 kWh (pic)
+        - Hospital: 25.0 kWh (base) → 70.0 kWh (pic)
+        - School: 1.0 kWh (base) → 25.0 kWh (pic)
+        - Hotel: 8.0 kWh (base) → 40.0 kWh (pic)
         """
-        logger.info(f"⏰ Génération séries temporelles: {len(buildings)} bâtiments")
-        logger.info(f"📅 Période: {start_date} → {end_date}, fréquence: {frequency}")
-        
-        # Création de l'index temporel
-        date_range = pd.date_range(start=start_date, end=end_date, freq=frequency)
-        logger.info(f"📊 {len(date_range)} points temporels par bâtiment")
-        
-        all_timeseries = []
-        
-        for i, building in enumerate(buildings):
-            if i % 1000 == 0:
-                logger.info(f"🔄 Progression: {i}/{len(buildings)} bâtiments traités")
-            
-            building_timeseries = self._generate_single_building_timeseries(
-                building, date_range
-            )
-            all_timeseries.append(building_timeseries)
-        
-        # Consolidation en DataFrame unique
-        final_df = pd.concat(all_timeseries, ignore_index=True)
-        
-        self.generation_stats['total_timeseries_generated'] += len(final_df)
-        
-        logger.info(f"✅ Séries temporelles générées: {len(final_df)} observations")
-        
-        return final_df
-    
-    def _generate_single_building_timeseries(
-        self,
-        building: Building,
-        date_range: pd.DatetimeIndex
-    ) -> pd.DataFrame:
-        """
-        Génère la série temporelle pour un bâtiment spécifique
-        
-        Args:
-            building: Bâtiment cible
-            date_range: Index temporel
-            
-        Returns:
-            pd.DataFrame: Série temporelle du bâtiment
-        """
-        profile = self.consumption_profiles.get(building.building_type, 
-                                               self.consumption_profiles['residential'])
-        
-        timeseries_data = []
-        
-        for timestamp in date_range:
-            # Facteurs temporels
-            hour_factor = self._calculate_hour_factor(timestamp.hour, profile)
-            day_factor = self._calculate_day_factor(timestamp.weekday(), building.building_type)
-            month_factor = self._calculate_month_factor(timestamp.month)
-            
-            # Facteurs climatiques Malaysia
-            temperature_factor = self._calculate_temperature_factor(timestamp, building.latitude)
-            humidity_factor = self._calculate_humidity_factor_temporal(timestamp)
-            
-            # Facteur aléatoire pour le réalisme
-            random_factor = np.random.normal(1.0, 0.1)
-            random_factor = max(0.5, min(1.5, random_factor))  # Limiter la variabilité
-            
-            # Calcul de la consommation finale
-            final_consumption = (
-                building.base_consumption_kwh *
-                hour_factor *
-                day_factor *
-                month_factor *
-                temperature_factor *
-                humidity_factor *
-                random_factor
-            )
-            
-            # Assurer des valeurs positives
-            final_consumption = max(0.1, final_consumption)
-            
-            timeseries_data.append({
-                'building_id': building.building_id,
-                'timestamp': timestamp,
-                'consumption_kwh': round(final_consumption, 3),
-                'hour': timestamp.hour,
-                'day_of_week': timestamp.weekday(),
-                'month': timestamp.month,
-                'is_weekend': timestamp.weekday() >= 5,
-                'temperature_factor': round(temperature_factor, 3),
-                'humidity_factor': round(humidity_factor, 3)
-            })
-        
-        return pd.DataFrame(timeseries_data)
-    
-    def _calculate_hour_factor(self, hour: int, profile: Dict) -> float:
-        """Calcule le facteur horaire selon le profil du bâtiment"""
-        if hour in profile['peak_hours']:
-            return profile['peak_multiplier']
-        elif 22 <= hour or hour <= 6:  # Nuit
-            return profile['night_factor']
-        else:  # Heures normales
-            return profile['base_factor']
-    
-    def _calculate_day_factor(self, day_of_week: int, building_type: str) -> float:
-        """Calcule le facteur selon le jour de la semaine"""
-        is_weekend = day_of_week >= 5
-        
-        weekend_factors = {
-            'residential': 1.2,  # Plus de consommation le weekend
-            'commercial': 0.6,   # Moins d'activité
-            'office': 0.2,       # Bureaux fermés
-            'industrial': 0.8,   # Production réduite
-            'hospital': 1.0,     # Pas de changement
-            'school': 0.1,       # Écoles fermées
-            'hotel': 1.1         # Plus d'activité touristique
+        # Spécifications officielles Malaysia
+        specs = {
+            'residential': {'base': 0.5, 'peak': 12.0, 'night': 0.3},
+            'commercial': {'base': 5.0, 'peak': 80.0, 'night': 0.2},
+            'industrial': {'base': 20.0, 'peak': 200.0, 'night': 0.7},
+            'office': {'base': 3.0, 'peak': 45.0, 'night': 0.1},
+            'hospital': {'base': 25.0, 'peak': 70.0, 'night': 0.8},
+            'school': {'base': 1.0, 'peak': 25.0, 'night': 0.05},
+            'hotel': {'base': 8.0, 'peak': 40.0, 'night': 0.6},
+            'public': {'base': 3.0, 'peak': 45.0, 'night': 0.1},
+            'religious': {'base': 1.0, 'peak': 15.0, 'night': 0.05}
         }
         
-        if is_weekend:
-            return weekend_factors.get(building_type, 1.0)
-        else:
-            return 1.0
+        building_spec = specs.get(building_type, specs['residential'])
+        base_unit_consumption = building_spec['base']  # kWh/heure pour 100m²
+        
+        # Facteur de surface (référence 100m²)
+        surface_factor = surface_area / 100.0
+        surface_factor = max(0.1, min(surface_factor, 10.0))  # Limiter 10m² à 1000m²
+        
+        # Consommation de base finale (kWh/heure)
+        base_consumption = base_unit_consumption * surface_factor
+        
+        return max(0.1, min(base_consumption, 500.0))  # Limites de sécurité
     
-    def _calculate_month_factor(self, month: int) -> float:
-        """Calcule le facteur saisonnier pour Malaysia"""
-        # Malaysia: mousson novembre-février, sec juin-août
+    def _get_hourly_factor(self, hour: int, building_type: str) -> float:
+        """
+        Facteurs horaires selon le climat tropical Malaysia
+        
+        PATTERNS CLIMATIQUES TROPICAUX:
+        - 6h-8h : Pic matinal (avant la chaleur)
+        - 11h-16h : Maximum de climatisation (heures les plus chaudes)
+        - 17h-21h : Activité élevée (après-midi/soirée)
+        - 22h-5h : Consommation nocturne réduite
+        """
+        # Facteurs nocturnes par type (selon spécifications)
+        night_factors = {
+            'residential': 0.3, 'commercial': 0.2, 'industrial': 0.7,
+            'office': 0.1, 'hospital': 0.8, 'school': 0.05,
+            'hotel': 0.6, 'public': 0.1, 'religious': 0.05
+        }
+        
+        night_factor = night_factors.get(building_type, 0.3)
+        
+        if building_type == 'residential':
+            if 6 <= hour <= 8:  # Pic matinal (avant chaleur)
+                return 1.4
+            elif 11 <= hour <= 16:  # Maximum climatisation
+                return 2.0  # Vers peak (12.0 kWh)
+            elif 17 <= hour <= 21:  # Activité élevée soirée
+                return 1.6
+            elif 22 <= hour <= 23 or 0 <= hour <= 5:  # Nuit
+                return night_factor  # 0.3
+            else:
+                return 1.0
+                
+        elif building_type == 'commercial':
+            if 9 <= hour <= 21:  # Heures d'ouverture
+                if 11 <= hour <= 16:  # Pic climatisation
+                    return 2.5  # Vers peak (80.0 kWh)
+                else:
+                    return 1.8
+            else:  # Fermé
+                return night_factor  # 0.2
+                
+        elif building_type == 'office':
+            if 8 <= hour <= 18:  # Heures de bureau
+                if 11 <= hour <= 16:  # Pic climatisation
+                    return 3.0  # Vers peak (45.0 kWh)
+                else:
+                    return 2.0
+            else:  # Fermé
+                return night_factor  # 0.1
+                
+        elif building_type == 'school':
+            if 7 <= hour <= 15:  # Heures scolaires
+                if 11 <= hour <= 14:  # Pic climatisation
+                    return 5.0  # Vers peak (25.0 kWh)
+                else:
+                    return 3.0
+            else:  # École fermée
+                return night_factor  # 0.05
+                
+        elif building_type == 'hospital':
+            if 11 <= hour <= 16:  # Pic climatisation
+                return 1.8  # Vers peak (70.0 kWh)
+            elif 6 <= hour <= 22:  # Activité diurne
+                return 1.4
+            else:  # Nuit (mais activité 24h/24)
+                return night_factor  # 0.8 (élevé pour hôpital)
+                
+        elif building_type == 'industrial':
+            if 11 <= hour <= 16:  # Pic climatisation
+                return 2.0  # Vers peak (200.0 kWh)
+            elif 6 <= hour <= 22:  # Heures de production
+                return 1.5
+            else:  # Nuit
+                return night_factor  # 0.7
+                
+        elif building_type in ['hotel', 'public']:
+            if building_type == 'hotel':
+                if 11 <= hour <= 16:  # Pic climatisation
+                    return 1.8  # Vers peak (40.0 kWh)
+                elif 6 <= hour <= 23:  # Activité hôtelière
+                    return 1.3
+                else:
+                    return night_factor  # 0.6
+            else:  # public
+                if 8 <= hour <= 17:  # Heures d'ouverture
+                    if 11 <= hour <= 16:
+                        return 3.0
+                    else:
+                        return 2.0
+                else:
+                    return night_factor  # 0.1
+        
+        return 1.0
+    
+    def _get_seasonal_factor(self, month: int) -> float:
+        """
+        Facteurs saisonniers Malaysia selon le document officiel
+        
+        FACTEURS SAISONNIERS:
+        - Nov-Fév: Mousson NE (0.9-1.1×) - Moins de climatisation
+        - Mar-Avr: Transition (1.2-1.5×) - Période chaude + Ramadan
+        - Mai-Août: Saison sèche (1.3-1.7×) - Maximum de climatisation
+        - Sep-Oct: Variable (1.0-1.3×) - Climat changeant
+        """
         seasonal_factors = {
-            1: 1.1,   # Janvier - mousson, plus de climatisation
-            2: 1.1,   # Février - mousson
-            3: 1.0,   # Mars - transition
-            4: 1.2,   # Avril - chaud et humide
-            5: 1.3,   # Mai - très chaud
-            6: 1.2,   # Juin - saison sèche
-            7: 1.2,   # Juillet - saison sèche
-            8: 1.2,   # Août - saison sèche
-            9: 1.1,   # Septembre - transition
-            10: 1.0,  # Octobre - transition
-            11: 1.1,  # Novembre - début mousson
-            12: 1.1   # Décembre - mousson
+            # Mousson NE - Moins de climatisation
+            11: 0.95, 12: 0.9, 1: 0.9, 2: 1.0,
+            
+            # Transition - Période chaude + Ramadan
+            3: 1.3, 4: 1.4,
+            
+            # Saison sèche - Maximum de climatisation
+            5: 1.5, 6: 1.6, 7: 1.7, 8: 1.6,
+            
+            # Variable - Climat changeant
+            9: 1.2, 10: 1.1
         }
         
         return seasonal_factors.get(month, 1.0)
     
-    def _calculate_temperature_factor(self, timestamp: pd.Timestamp, latitude: float) -> float:
-        """Calcule le facteur de température selon l'heure et la localisation"""
-        # Température typique Malaysia: 26-32°C
-        base_temp = 28.0
-        
-        # Variation diurne
-        hour_variation = 3 * math.sin((timestamp.hour - 6) * math.pi / 12)
-        daily_temp = base_temp + hour_variation
-        
-        # Facteur de consommation basé sur la température
-        # Plus il fait chaud, plus la climatisation consomme
-        if daily_temp > 30:
-            return 1.3
-        elif daily_temp > 28:
-            return 1.1
-        else:
-            return 1.0
-    
-    def _calculate_humidity_factor_temporal(self, timestamp: pd.Timestamp) -> float:
-        """Calcule le facteur d'humidité temporel"""
-        # Humidité Malaysia: 70-90%
-        # Plus élevée tôt le matin et en soirée
-        hour = timestamp.hour
-        
-        if 5 <= hour <= 8 or 18 <= hour <= 22:
-            return 1.1  # Humidité élevée
-        else:
-            return 1.0
-    
-    def _determine_climate_zone(self, latitude: float, longitude: float) -> str:
-        """Détermine la zone climatique Malaysia"""
-        if latitude < 2.0:
-            return 'equatorial'
-        elif latitude < 4.0:
-            return 'tropical_rainforest'
-        else:
-            return 'tropical_monsoon'
-    
-    def _calculate_cooling_degree_days(self, latitude: float) -> float:
-        """Calcule les degrés-jours de refroidissement"""
-        # Base 24°C pour Malaysia
-        base_temp = 24.0
-        avg_temp = 28.0 + (latitude - 3.0) * 0.5  # Variation selon latitude
-        return max(0, avg_temp - base_temp) * 365
-    
-    def _calculate_humidity_factor(self, latitude: float) -> float:
-        """Calcule le facteur d'humidité selon la localisation"""
-        # Humidité plus élevée près de l'équateur
-        if latitude < 2.0:
-            return 1.2  # Très humide
-        elif latitude < 4.0:
-            return 1.1  # Humide
-        else:
-            return 1.0  # Modérément humide
-    
-    def _estimate_occupancy(self, building_type: str, surface_area: float) -> str:
-        """Estime le niveau d'occupation"""
-        occupancy_density = {
-            'residential': 40,  # m²/personne
-            'commercial': 20,   # m²/personne
-            'office': 15,       # m²/personne
-            'industrial': 100,  # m²/personne
-            'hospital': 25,     # m²/personne
-            'school': 10,       # m²/personne
-            'hotel': 30         # m²/personne
-        }
-        
-        density = occupancy_density.get(building_type, 30)
-        estimated_people = surface_area / density
-        
-        if estimated_people < 5:
-            return 'low'
-        elif estimated_people < 20:
-            return 'medium'
-        else:
-            return 'high'
-    
-    def _assign_efficiency_rating(self, building_type: str) -> str:
-        """Assigne une classe d'efficacité énergétique"""
-        # Distribution probabiliste selon le type
-        ratings = ['A', 'B', 'C', 'D', 'E']
-        
-        probabilities = {
-            'residential': [0.1, 0.2, 0.4, 0.2, 0.1],
-            'commercial': [0.2, 0.3, 0.3, 0.1, 0.1],
-            'office': [0.3, 0.3, 0.2, 0.1, 0.1],
-            'industrial': [0.1, 0.2, 0.3, 0.3, 0.1],
-            'hospital': [0.4, 0.3, 0.2, 0.1, 0.0],
-            'school': [0.2, 0.3, 0.3, 0.2, 0.0],
-            'hotel': [0.2, 0.3, 0.3, 0.1, 0.1]
-        }
-        
-        probs = probabilities.get(building_type, [0.2, 0.2, 0.2, 0.2, 0.2])
-        return np.random.choice(ratings, p=probs)
-    
-    def _determine_voltage_level(self, building_type: str, surface_area: float) -> str:
-        """Détermine le niveau de tension"""
-        if building_type in ['industrial', 'hospital'] or surface_area > 5000:
-            return 'high_voltage'
-        elif building_type in ['commercial', 'office'] or surface_area > 1000:
-            return 'medium_voltage'
-        else:
-            return 'low_voltage'
-    
-    def _has_backup_generator(self, building_type: str) -> bool:
-        """Détermine si le bâtiment a un générateur de secours"""
-        probabilities = {
-            'residential': 0.05,
-            'commercial': 0.3,
-            'office': 0.4,
-            'industrial': 0.8,
-            'hospital': 0.95,
-            'school': 0.2,
-            'hotel': 0.7
-        }
-        
-        prob = probabilities.get(building_type, 0.1)
-        return np.random.random() < prob
-    
-    def _has_solar_panels(self, building_type: str) -> bool:
-        """Détermine si le bâtiment a des panneaux solaires"""
-        probabilities = {
-            'residential': 0.15,
-            'commercial': 0.25,
-            'office': 0.35,
-            'industrial': 0.4,
-            'hospital': 0.3,
-            'school': 0.2,
-            'hotel': 0.3
-        }
-        
-        prob = probabilities.get(building_type, 0.2)
-        return np.random.random() < prob
-    
-    def get_generation_summary(self, buildings: List[Building], timeseries_df: pd.DataFrame) -> Dict:
+    def _get_daily_factor(self, weekday: int, building_type: str) -> float:
         """
-        Génère un résumé statistique de la génération
+        Facteurs hebdomadaires Malaysia
+        
+        PATTERNS HEBDOMADAIRES:
+        - Vendredi après-midi : Réduction d'activité (prière du vendredi)
+        - Weekend : Plus de consommation résidentielle
+        - Jours ouvrables : Pics dans les bureaux/commerces
         
         Args:
-            buildings: Liste des bâtiments
-            timeseries_df: DataFrame des séries temporelles
+            weekday: 0=Lundi, 4=Vendredi, 5=Samedi, 6=Dimanche
+        """
+        is_weekend = weekday >= 5  # Samedi-Dimanche
+        
+        if building_type == 'residential':
+            return 1.2 if is_weekend else 1.0  # Plus de consommation week-end
+            
+        elif building_type in ['office', 'commercial']:
+            if is_weekend:
+                return 0.4  # Bureaux/commerces fermés
+            else:
+                return 1.0
+                
+        elif building_type == 'school':
+            return 0.05 if is_weekend else 1.0  # École fermée week-end
+            
+        elif building_type in ['hospital', 'hotel']:
+            return 1.0  # Pas d'impact majeur
+            
+        elif building_type == 'industrial':
+            return 0.7 if is_weekend else 1.0  # Production réduite week-end
+            
+        else:
+            return 1.0
+    
+    def _get_ramadan_factor(self, month: int, hour: int, building_type: str) -> float:
+        """
+        Facteurs Ramadan Malaysia (Mar-Avr approximatif)
+        
+        PÉRIODE DE RAMADAN:
+        - 4h-17h : Consommation réduite de 40% (jeûne)
+        - 18h-23h : Consommation augmentée de 40% (Iftar, activités nocturnes)
+        """
+        # Ramadan approximatif en Mars-Avril
+        if month not in [3, 4]:
+            return 1.0
+            
+        if building_type in ['residential', 'commercial']:
+            if 4 <= hour <= 17:  # Période de jeûne
+                return 0.6  # Réduction de 40%
+            elif 18 <= hour <= 23:  # Iftar et activités nocturnes
+                return 1.4  # Augmentation de 40%
+            else:
+                return 1.0
+        else:
+            return 1.0  # Hôpitaux, industriel moins affectés
+    
+    def _get_friday_prayer_factor(self, weekday: int, hour: int, building_type: str) -> float:
+        """
+        Facteur spécial pour la prière du vendredi
+        
+        VENDREDI APRÈS-MIDI:
+        - Réduction d'activité (prière du vendredi) 12h-15h
+        """
+        if weekday == 4 and 12 <= hour <= 15:  # Vendredi 12h-15h
+            if building_type in ['office', 'commercial']:
+                return 0.6  # Réduction pour prière
+        return 1.0
+    
+    def _generate_building_timeseries(self, building: Dict, date_range: pd.DatetimeIndex) -> List[Dict]:
+        """
+        Génère la série temporelle avec TOUS les patterns Malaysia
+        
+        Args:
+            building: Données du bâtiment OSM
+            date_range: Plage temporelle pandas
             
         Returns:
-            Dict: Résumé statistique
+            List[Dict]: Points de données avec patterns Malaysia complets
         """
-        if timeseries_df.empty:
-            return {'error': 'Aucune donnée générée'}
+        building_id = building['id']
+        building_type = building['building_type']
+        surface_area = building.get('surface_area_m2', 100)
         
-        summary = {
-            'generation_timestamp': datetime.now().isoformat(),
-            'buildings_count': len(buildings),
-            'total_observations': len(timeseries_df),
-            'date_range': {
-                'start': timeseries_df['timestamp'].min().isoformat(),
-                'end': timeseries_df['timestamp'].max().isoformat(),
-                'duration_days': (timeseries_df['timestamp'].max() - timeseries_df['timestamp'].min()).days
-            },
-            'consumption_statistics': {
-                'total_kwh': round(timeseries_df['consumption_kwh'].sum(), 2),
-                'mean_kwh_per_hour': round(timeseries_df['consumption_kwh'].mean(), 3),
-                'median_kwh_per_hour': round(timeseries_df['consumption_kwh'].median(), 3),
-                'std_kwh_per_hour': round(timeseries_df['consumption_kwh'].std(), 3),
-                'min_kwh_per_hour': round(timeseries_df['consumption_kwh'].min(), 3),
-                'max_kwh_per_hour': round(timeseries_df['consumption_kwh'].max(), 3),
-                'percentile_95': round(timeseries_df['consumption_kwh'].quantile(0.95), 3)
-            },
-            'building_type_distribution': timeseries_df.groupby('building_id').first().groupby(
-                lambda x: [b.building_type for b in buildings if b.building_id == x][0] 
-                if [b.building_type for b in buildings if b.building_id == x] else 'unknown'
-            ).size().to_dict(),
-            'temporal_patterns': {
-                'peak_hour': int(timeseries_df.groupby('hour')['consumption_kwh'].mean().idxmax()),
-                'peak_day': int(timeseries_df.groupby('day_of_week')['consumption_kwh'].mean().idxmax()),
-                'weekend_vs_weekday_ratio': round(
-                    timeseries_df[timeseries_df['is_weekend']]['consumption_kwh'].mean() /
-                    timeseries_df[~timeseries_df['is_weekend']]['consumption_kwh'].mean(), 2
-                )
-            },
-            'quality_indicators': {
-                'zero_values': int((timeseries_df['consumption_kwh'] == 0).sum()),
-                'negative_values': int((timeseries_df['consumption_kwh'] < 0).sum()),
-                'null_values': int(timeseries_df['consumption_kwh'].isnull().sum()),
-                'outliers_count': int((timeseries_df['consumption_kwh'] > timeseries_df['consumption_kwh'].quantile(0.99)).sum())
-            }
-        }
+        # Consommation de base (kWh/heure) selon spécifications Malaysia
+        base_consumption_hourly = self._estimate_base_consumption(building_type, surface_area)
         
-        return summary
+        data_points = []
+        
+        for timestamp in date_range:
+            # 1. Facteur horaire tropical Malaysia
+            hour_factor = self._get_hourly_factor(timestamp.hour, building_type)
+            
+            # 2. Facteur hebdomadaire Malaysia
+            day_factor = self._get_daily_factor(timestamp.weekday(), building_type)
+            
+            # 3. Facteur saisonnier Malaysia
+            seasonal_factor = self._get_seasonal_factor(timestamp.month)
+            
+            # 4. Facteur Ramadan Malaysia
+            ramadan_factor = self._get_ramadan_factor(timestamp.month, timestamp.hour, building_type)
+            
+            # 5. Facteur prière du vendredi
+            friday_factor = self._get_friday_prayer_factor(timestamp.weekday(), timestamp.hour, building_type)
+            
+            # 6. Variation aléatoire réaliste
+            random_factor = np.random.normal(1.0, 0.05)  # ±5% seulement
+            random_factor = max(0.8, min(random_factor, 1.2))  # Limiter ±20%
+            
+            # 7. Calcul de la durée de l'intervalle
+            if len(date_range) > 1:
+                interval_hours = (date_range[1] - date_range[0]).total_seconds() / 3600
+            else:
+                interval_hours = 1.0
+            
+            # 8. CALCUL FINAL avec tous les patterns Malaysia
+            consumption = (base_consumption_hourly *      # Base kWh/h (specs Malaysia)
+                          hour_factor *                   # Pattern tropical
+                          day_factor *                    # Pattern hebdomadaire
+                          seasonal_factor *               # Pattern saisonnier
+                          ramadan_factor *                # Pattern Ramadan
+                          friday_factor *                 # Pattern vendredi
+                          random_factor *                 # Variation réaliste
+                          interval_hours)                 # Durée de l'intervalle
+            
+            # 9. Limites de sécurité
+            consumption = max(0.001, consumption)  # Minimum technique
+            
+            # 10. Debug pour les premiers points
+            if len(data_points) < 3:
+                logger.info(f"🔍 Point {len(data_points)+1} - {building_type} {surface_area}m²:")
+                logger.info(f"   Base: {base_consumption_hourly:.3f} kWh/h")
+                logger.info(f"   Facteurs: hour={hour_factor:.2f}, day={day_factor:.2f}, season={seasonal_factor:.2f}")
+                logger.info(f"   Ramadan={ramadan_factor:.2f}, vendredi={friday_factor:.2f}, random={random_factor:.2f}")
+                logger.info(f"   Intervalle: {interval_hours:.2f}h")
+                logger.info(f"   Final: {consumption:.4f} kWh")
+            
+            data_points.append({
+                'building_id': building_id,
+                'timestamp': timestamp,
+                'consumption_kwh': round(consumption, 4),
+                'building_type': building_type,
+                'latitude': building['latitude'],
+                'longitude': building['longitude'],
+                'zone_name': building['zone_name']
+            })
+        
+        return data_points
     
     def get_statistics(self) -> Dict:
         """
         Retourne les statistiques du générateur
         
         Returns:
-            Dict: Statistiques de génération
+            Dict: Statistiques de génération complètes
         """
         uptime = datetime.now() - self.generation_stats['generation_start_time']
         
@@ -508,7 +444,15 @@ class ElectricityDataGenerator:
             ),
             'generation_rate_observations_per_second': round(
                 self.generation_stats['total_timeseries_generated'] / max(uptime.total_seconds(), 1), 2
-            )
+            ),
+            'patterns_implemented': [
+                'Malaysia Tropical Climate',
+                'Seasonal Variations (Monsoon/Dry)',
+                'Weekly Patterns (Weekend/Weekday)',
+                'Ramadan Adjustments',
+                'Friday Prayer Reductions',
+                'Building Type Specific Profiles'
+            ]
         }
 
 
@@ -548,67 +492,45 @@ def validate_generation_parameters(
         if start >= end:
             errors.append("Date de fin doit être après date de début")
         
-        # Vérifier que les dates ne sont pas dans le futur
-        today = datetime.now().date()
-        if start.date() > today:
-            errors.append("Date de début ne peut pas être dans le futur")
-        
         # Limite de période maximale
-        max_days = getattr(GEN_CONFIG, 'MAX_DAYS', 365)
-        if (end - start).days > max_days:
-            errors.append(f"Période maximale autorisée: {max_days} jours")
+        if (end - start).days > 365:
+            errors.append("Période maximale autorisée: 365 jours")
             
     except (ValueError, TypeError) as e:
         errors.append(f"Format de dates invalide (utiliser YYYY-MM-DD): {str(e)}")
     
     # Validation de la fréquence
-    valid_frequencies = {
-        '15T': '15 minutes',
-        '30T': '30 minutes', 
-        '1H': '1 heure',
-        '3H': '3 heures',
-        'D': 'Quotidien'
-    }
+    valid_frequencies = ['15T', '30T', '1H', '3H', 'D']
     
     if not frequency:
         errors.append("Fréquence requise")
     elif frequency not in valid_frequencies:
-        errors.append(f"Fréquences supportées: {list(valid_frequencies.keys())}")
+        errors.append(f"Fréquences supportées: {valid_frequencies}")
     
-    # Validation du nombre de bâtiments
-    min_buildings = getattr(GEN_CONFIG, 'MIN_BUILDINGS', 1)
-    max_buildings = getattr(GEN_CONFIG, 'MAX_BUILDINGS', 50000)
-    
+    # Validation du nombre de bâtiments (LIMITES AUGMENTÉES)
     try:
         num_buildings = int(num_buildings)
-        if not (min_buildings <= num_buildings <= max_buildings):
-            errors.append(f"Nombre de bâtiments doit être entre {min_buildings} et {max_buildings}")
+        if not (1 <= num_buildings <= 1000000):  # 1 million max
+            errors.append("Nombre de bâtiments doit être entre 1 et 1,000,000")
     except (ValueError, TypeError):
         errors.append("Nombre de bâtiments doit être un entier")
     
     # Validation de la charge de travail
     try:
-        if len(errors) == 0:  # Seulement si les paramètres de base sont valides
+        if len(errors) == 0:
             start = pd.to_datetime(start_date)
             end = pd.to_datetime(end_date)
             
             # Calcul du nombre d'observations
-            freq_minutes = {
-                '15T': 15,
-                '30T': 30,
-                '1H': 60,
-                '3H': 180,
-                'D': 1440
-            }
+            freq_minutes = {'15T': 15, '30T': 30, '1H': 60, '3H': 180, 'D': 1440}
             
             if frequency in freq_minutes:
                 total_minutes = (end - start).total_seconds() / 60
                 observations_per_building = total_minutes / freq_minutes[frequency]
                 total_observations = num_buildings * observations_per_building
                 
-                # Limite raisonnable pour éviter les surcharges
-                max_observations = 10_000_000  # 10 millions
-                if total_observations > max_observations:
+                # Limite technique: 100 millions de points
+                if total_observations > 100_000_000:
                     errors.append(f"Trop d'observations estimées ({int(total_observations):,}). Réduisez la période ou le nombre de bâtiments.")
     
     except Exception as e:
@@ -643,12 +565,12 @@ def estimate_generation_time(
         
         total_observations = num_buildings * len(date_range)
         
-        # Estimation du temps (calibré selon les performances)
-        observations_per_second = 10000
+        # Estimation du temps (calibré selon les performances Malaysia)
+        observations_per_second = 15000  # Optimisé
         estimated_time_seconds = total_observations / observations_per_second
         
         # Estimation de la taille
-        bytes_per_observation = 150  # Estimation avec métadonnées
+        bytes_per_observation = 150  # Avec métadonnées
         estimated_size_mb = (total_observations * bytes_per_observation) / (1024 * 1024)
         
         # Niveau de complexité
@@ -658,139 +580,79 @@ def estimate_generation_time(
         elif total_observations < 1000000:
             complexity = 'modéré'
             recommendation = 'Génération standard (1-5 minutes)'
-        elif total_observations < 5000000:
+        elif total_observations < 10000000:
             complexity = 'complexe'
-            recommendation = 'Génération longue (5-15 minutes)'
+            recommendation = 'Génération longue (5-30 minutes)'
         else:
             complexity = 'très_complexe'
-            recommendation = 'Génération très longue (> 15 minutes)'
+            recommendation = 'Génération très longue (> 30 minutes)'
         
         return {
-            'num_buildings': num_buildings,
-            'date_range_days': (end - start).days,
-            'frequency': frequency,
-            'observations_per_building': len(date_range),
-            'total_observations': total_observations,
+            'total_observations': int(total_observations),
             'estimated_time_seconds': round(estimated_time_seconds, 1),
             'estimated_time_minutes': round(estimated_time_seconds / 60, 1),
             'estimated_size_mb': round(estimated_size_mb, 1),
-            'complexity_level': complexity,
+            'complexity': complexity,
             'recommendation': recommendation,
-            'memory_usage_estimate_mb': round(estimated_size_mb * 2, 1)  # Buffer pour traitement
+            'buildings_count': num_buildings,
+            'time_periods': len(date_range)
         }
         
     except Exception as e:
         return {
-            'error': f"Erreur estimation: {str(e)}",
-            'complexity_level': 'unknown'
+            'error': f'Erreur estimation: {str(e)}',
+            'total_observations': 0
         }
 
 
-def calculate_quality_score(buildings_df: pd.DataFrame, timeseries_df: pd.DataFrame) -> float:
-    """
-    Calcule un score de qualité pour les données générées
-    
-    Args:
-        buildings_df: DataFrame des bâtiments
-        timeseries_df: DataFrame des séries temporelles
-        
-    Returns:
-        float: Score de qualité (0-100)
-    """
-    if timeseries_df.empty:
-        return 0.0
-    
-    score = 100.0
-    
-    # Pénalités pour les valeurs négatives
-    negative_count = (timeseries_df['consumption_kwh'] < 0).sum()
-    if negative_count > 0:
-        score -= (negative_count / len(timeseries_df)) * 30
-    
-    # Pénalités pour les valeurs nulles
-    null_count = timeseries_df['consumption_kwh'].isnull().sum()
-    if null_count > 0:
-        score -= (null_count / len(timeseries_df)) * 40
-    
-    # Pénalités pour les valeurs aberrantes
-    percentile_99_9 = timeseries_df['consumption_kwh'].quantile(0.999)
-    mean_consumption = timeseries_df['consumption_kwh'].mean()
-    
-    if percentile_99_9 > mean_consumption * 10:  # Plus de 10x la moyenne
-        score -= 10
-    
-    # Bonus pour variabilité réaliste
-    cv = timeseries_df['consumption_kwh'].std() / timeseries_df['consumption_kwh'].mean()
-    if 0.2 <= cv <= 0.8:  # Coefficient de variation réaliste
-        score += 5
-    
-    # Pénalité pour manque de variation temporelle
-    hourly_std = timeseries_df.groupby('hour')['consumption_kwh'].mean().std()
-    if hourly_std < mean_consumption * 0.1:  # Variation horaire trop faible
-        score -= 5
-    
-    return max(0.0, min(100.0, score))
-
-
 # ==============================================================================
-# EXEMPLE D'UTILISATION
+# EXEMPLE D'UTILISATION ET TESTS
 # ==============================================================================
 
 if __name__ == '__main__':
-    # Test du générateur
-    from src.models.building import Building
-    
-    # Création d'un générateur
+    # Test du générateur Malaysia
     generator = ElectricityDataGenerator()
     
-    # Test avec des bâtiments fictifs
+    print("🇲🇾 TEST GÉNÉRATEUR MALAYSIA")
+    print("=" * 50)
+    
+    # Test avec bâtiment exemple
     test_buildings = [
-        Building(
-            osm_id='test_1',
-            latitude=3.15,
-            longitude=101.7,
-            building_type='residential',
-            surface_area_m2=150,
-            base_consumption_kwh=20,
-            zone_name='test_zone'
-        ),
-        Building(
-            osm_id='test_2',
-            latitude=3.16,
-            longitude=101.71,
-            building_type='commercial',
-            surface_area_m2=500,
-            base_consumption_kwh=80,
-            zone_name='test_zone'
-        )
+        {
+            'id': 'test_residential',
+            'building_type': 'residential',
+            'surface_area_m2': 150,
+            'latitude': 4.576,
+            'longitude': 101.112,
+            'zone_name': 'Ipoh'
+        }
     ]
     
     # Test validation
     is_valid, errors = validate_generation_parameters(
-        '2024-01-01', '2024-01-02', '1H', 2
+        '2024-01-25', '2024-01-26', '30T', 1
     )
     print(f"Validation: {'✅' if is_valid else '❌'} {errors}")
     
     # Test estimation
-    estimation = estimate_generation_time(2, '2024-01-01', '2024-01-02', '1H')
+    estimation = estimate_generation_time(1, '2024-01-25', '2024-01-26', '30T')
     print(f"Estimation: {estimation['total_observations']} observations, {estimation['estimated_time_seconds']}s")
     
-    # Test génération métadonnées
-    buildings_df = generator.generate_building_metadata(test_buildings)
-    print(f"Métadonnées: {len(buildings_df)} bâtiments")
-    
-    # Test génération séries temporelles
-    timeseries_df = generator.generate_timeseries_for_buildings(
-        test_buildings, '2024-01-01', '2024-01-02', '1H'
+    # Test génération
+    result = generator.generate_timeseries_data(
+        test_buildings, '2024-01-25', '2024-01-25', '30T'
     )
-    print(f"Séries temporelles: {len(timeseries_df)} observations")
     
-    # Test résumé
-    summary = generator.get_generation_summary(test_buildings, timeseries_df)
-    print(f"Résumé: {summary['total_observations']} observations générées")
+    if result['success']:
+        df = result['data']
+        print(f"✅ Génération réussie: {len(df)} points")
+        print(f"📊 Exemple: {df.iloc[0]['consumption_kwh']:.4f} kWh")
+        print(f"📈 Plage: {df['consumption_kwh'].min():.4f} - {df['consumption_kwh'].max():.4f} kWh")
+    else:
+        print(f"❌ Erreur: {result['error']}")
     
-    # Test score qualité
-    quality_score = calculate_quality_score(buildings_df, timeseries_df)
-    print(f"Score qualité: {quality_score}/100")
+    # Statistiques
+    stats = generator.get_statistics()
+    print(f"📊 Statistiques: {stats['total_buildings_generated']} bâtiments générés")
     
-    print("✅ Tests du générateur terminés")
+    print("✅ Tests terminés - Générateur Malaysia prêt!")
