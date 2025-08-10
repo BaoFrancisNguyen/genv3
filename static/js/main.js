@@ -955,4 +955,560 @@ function updateBuildingsPreview(buildings) {
     const previewDiv = document.getElementById('buildings-preview');
     if (!previewDiv || !buildings.length) return;
     
-    const sample = buildings.slice(0
+    const sample = buildings.slice(0, 10); // Premier échantillon
+    
+    let html = `
+        <h4>📊 Aperçu des Bâtiments (${sample.length}/${buildings.length})</h4>
+        <div class="table-responsive">
+            <table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Type</th>
+                        <th>Coordonnées</th>
+                        <th>Surface (m²)</th>
+                        <th>Conso. Base (kWh/h)</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    sample.forEach(building => {
+        html += `
+            <tr>
+                <td>${building.building_id}</td>
+                <td>${building.building_type}</td>
+                <td>${building.latitude?.toFixed(4)}, ${building.longitude?.toFixed(4)}</td>
+                <td>${building.surface_area_m2?.toFixed(0) || 'N/A'}</td>
+                <td>${building.base_consumption_kwh?.toFixed(3) || 'N/A'}</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    previewDiv.innerHTML = html;
+}
+
+/**
+ * Met à jour l'aperçu des séries temporelles
+ */
+function updateTimeseriesPreview(timeseries) {
+    const previewDiv = document.getElementById('timeseries-preview');
+    if (!previewDiv || !timeseries.length) return;
+    
+    const sample = timeseries.slice(0, 15); // Échantillon temporel
+    
+    let html = `
+        <h4>⚡ Aperçu des Séries Temporelles (${sample.length}/${timeseries.length})</h4>
+        <div class="table-responsive">
+            <table class="preview-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Bâtiment</th>
+                        <th>Consommation (kWh)</th>
+                        <th>Température (°C)</th>
+                        <th>Humidité</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+    
+    sample.forEach(point => {
+        const timestamp = new Date(point.timestamp).toLocaleString('fr-FR');
+        html += `
+            <tr>
+                <td>${timestamp}</td>
+                <td>${point.building_id}</td>
+                <td>${point.consumption_kwh?.toFixed(3) || 'N/A'}</td>
+                <td>${point.temperature_c?.toFixed(1) || 'N/A'}</td>
+                <td>${(point.humidity * 100)?.toFixed(0) || 'N/A'}%</td>
+            </tr>
+        `;
+    });
+    
+    html += `
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    previewDiv.innerHTML = html;
+}
+
+/**
+ * Met à jour le contenu du résumé statistique
+ */
+function updateSummaryContent(statistics) {
+    const summaryDiv = document.getElementById('summary-content');
+    if (!summaryDiv) return;
+    
+    const stats = statistics || {};
+    
+    let html = `
+        <div class="summary-grid">
+            <div class="summary-section">
+                <h4>📊 Informations Générales</h4>
+                <ul class="summary-list">
+                    <li><strong>Bâtiments traités:</strong> ${formatNumber(stats.total_buildings || 0)}</li>
+                    <li><strong>Observations générées:</strong> ${formatNumber(stats.total_observations || 0)}</li>
+                    <li><strong>Période:</strong> ${stats.date_range?.start || 'N/A'} → ${stats.date_range?.end || 'N/A'}</li>
+                    <li><strong>Fréquence:</strong> ${stats.frequency || 'N/A'}</li>
+                </ul>
+            </div>
+            
+            <div class="summary-section">
+                <h4>⚡ Consommation Électrique</h4>
+                <ul class="summary-list">
+                    <li><strong>Consommation totale:</strong> ${(stats.total_consumption_kwh || 0).toFixed(2)} kWh</li>
+                    <li><strong>Moyenne horaire:</strong> ${(stats.average_hourly_consumption || 0).toFixed(3)} kWh</li>
+                    <li><strong>Pic maximum:</strong> ${(stats.peak_consumption || 0).toFixed(3)} kWh</li>
+                    <li><strong>Consommation minimum:</strong> ${(stats.min_consumption || 0).toFixed(3)} kWh</li>
+                </ul>
+            </div>
+            
+            <div class="summary-section">
+                <h4>🏗️ Répartition des Bâtiments</h4>
+                <ul class="summary-list">
+    `;
+    
+    // Ajout de la répartition par type si disponible
+    if (stats.building_statistics?.types_distribution) {
+        Object.entries(stats.building_statistics.types_distribution)
+            .slice(0, 5)
+            .forEach(([type, count]) => {
+                html += `<li><strong>${type}:</strong> ${formatNumber(count)}</li>`;
+            });
+    }
+    
+    html += `
+                </ul>
+            </div>
+            
+            <div class="summary-section">
+                <h4>📈 Qualité des Données</h4>
+                <ul class="summary-list">
+                    <li><strong>Score qualité global:</strong> ${stats.quality_metrics?.overall_score || 'N/A'}%</li>
+                    <li><strong>Données valides:</strong> ${stats.quality_metrics?.valid_data_percentage || 'N/A'}%</li>
+                    <li><strong>Anomalies détectées:</strong> ${stats.quality_metrics?.anomalies_count || 0}</li>
+                </ul>
+            </div>
+        </div>
+    `;
+    
+    summaryDiv.innerHTML = html;
+}
+
+/**
+ * Animation d'apparition des résultats
+ */
+function animateResultsAppearance() {
+    const sections = document.querySelectorAll('#results-section .stat-card, #results-section .data-preview');
+    
+    sections.forEach((section, index) => {
+        section.style.opacity = '0';
+        section.style.transform = 'translateY(20px)';
+        
+        setTimeout(() => {
+            section.style.transition = 'all 0.4s ease';
+            section.style.opacity = '1';
+            section.style.transform = 'translateY(0)';
+        }, index * 100);
+    });
+}
+
+// ==============================================================================
+// GESTION DES ONGLETS
+// ==============================================================================
+
+/**
+ * Initialise le système d'onglets
+ */
+function initializeTabs() {
+    const tabButtons = document.querySelectorAll('.tab-btn');
+    const tabPanes = document.querySelectorAll('.tab-pane');
+    
+    tabButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const targetTab = button.getAttribute('data-tab');
+            
+            // Déactiver tous les onglets
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            tabPanes.forEach(pane => pane.classList.remove('active'));
+            
+            // Activer l'onglet sélectionné
+            button.classList.add('active');
+            const targetPane = document.getElementById(`tab-${targetTab}`);
+            if (targetPane) {
+                targetPane.classList.add('active');
+            }
+        });
+    });
+    
+    console.log('✅ Système d\'onglets initialisé');
+}
+
+// ==============================================================================
+// GESTION DE L'EXPORT
+// ==============================================================================
+
+/**
+ * Initialise le formulaire d'export
+ */
+function initializeExportForm() {
+    const exportForm = document.getElementById('export-form');
+    
+    if (!exportForm) return;
+    
+    exportForm.addEventListener('submit', handleExport);
+    
+    console.log('✅ Formulaire d\'export initialisé');
+}
+
+/**
+ * Gère l'export des données
+ */
+async function handleExport(event) {
+    event.preventDefault();
+    
+    if (!appState.generatedData) {
+        showNotification('Aucune donnée à exporter', 'error');
+        return;
+    }
+    
+    const formData = new FormData(event.target);
+    const selectedFormats = formData.getAll('formats');
+    
+    if (selectedFormats.length === 0) {
+        showNotification('Sélectionnez au moins un format d\'export', 'warning');
+        return;
+    }
+    
+    const exportBtn = document.getElementById('export-btn');
+    
+    try {
+        showLoading(true);
+        updateStatus('Export des données en cours...');
+        if (exportBtn) exportBtn.disabled = true;
+        
+        showProgress('Préparation de l\'export...', 0);
+        
+        const exportData = {
+            buildings: appState.generatedData.buildings,
+            timeseries: appState.generatedData.timeseries,
+            formats: selectedFormats
+        };
+        
+        // Simulation du progrès d'export
+        updateProgress(30, 'Conversion des données...');
+        
+        const result = await apiRequest('/export', {
+            method: 'POST',
+            body: JSON.stringify(exportData)
+        });
+        
+        updateProgress(80, 'Finalisation des fichiers...');
+        
+        if (result.success) {
+            hideProgress();
+            
+            // Affichage des liens de téléchargement
+            displayDownloadLinks(result);
+            showSection('download-section');
+            
+            showNotification(
+                `Export réussi! ${Object.keys(result.files_created).length} formats créés`, 
+                'success'
+            );
+            updateStatus(`Export terminé: ${result.total_size_mb.toFixed(2)} MB`);
+            
+        } else {
+            throw new Error(result.error || 'Erreur d\'export');
+        }
+        
+    } catch (error) {
+        hideProgress();
+        console.error('Erreur export:', error);
+        showNotification(`Erreur d'export: ${error.message}`, 'error');
+        updateStatus('Erreur d\'export');
+    } finally {
+        showLoading(false);
+        if (exportBtn) exportBtn.disabled = false;
+    }
+}
+
+/**
+ * Affiche les liens de téléchargement
+ */
+function displayDownloadLinks(exportResult) {
+    const downloadSection = document.getElementById('download-links');
+    if (!downloadSection) return;
+    
+    const filesCreated = exportResult.files_created || {};
+    
+    let html = '';
+    
+    Object.entries(filesCreated).forEach(([format, formatData]) => {
+        if (!formatData.success) return;
+        
+        html += `<div class="download-format">`;
+        html += `<h4>📁 Format ${format.toUpperCase()}</h4>`;
+        
+        Object.entries(formatData.files || {}).forEach(([fileType, fileInfo]) => {
+            const filename = fileInfo.path ? fileInfo.path.split('/').pop() : 'unknown';
+            const sizeInfo = fileInfo.size_mb ? ` (${fileInfo.size_mb.toFixed(2)} MB)` : '';
+            
+            html += `
+                <a href="/api/download/${filename}" 
+                   class="download-link" 
+                   download="${filename}"
+                   onclick="trackDownload('${format}', '${fileType}')">
+                    📥 ${fileType}_${format}${sizeInfo}
+                </a>
+            `;
+        });
+        
+        html += `</div>`;
+    });
+    
+    if (!html) {
+        html = '<p>Aucun fichier disponible au téléchargement.</p>';
+    }
+    
+    downloadSection.innerHTML = html;
+}
+
+/**
+ * Suit les téléchargements pour statistiques
+ */
+function trackDownload(format, fileType) {
+    console.log(`📥 Téléchargement: ${format} - ${fileType}`);
+    // Ici on pourrait ajouter des analytics
+}
+
+// ==============================================================================
+// GESTION DU PROGRESS
+// ==============================================================================
+
+/**
+ * Affiche le progress overlay
+ */
+function showProgress(message, percentage) {
+    let progressOverlay = document.getElementById('global-progress');
+    
+    if (!progressOverlay) {
+        // Créer l'overlay s'il n'existe pas
+        progressOverlay = document.createElement('div');
+        progressOverlay.id = 'global-progress';
+        progressOverlay.className = 'progress-overlay';
+        progressOverlay.innerHTML = `
+            <div class="progress-content">
+                <div class="progress-title" id="progress-title">Traitement en cours...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progress-fill"></div>
+                </div>
+                <div class="progress-text" id="progress-text">Initialisation...</div>
+                <button id="cancel-btn" class="btn btn-danger">Annuler</button>
+            </div>
+        `;
+        document.body.appendChild(progressOverlay);
+        
+        // Gestionnaire d'annulation
+        document.getElementById('cancel-btn').addEventListener('click', () => {
+            cancelAllRequests();
+            hideProgress();
+            showNotification('Opération annulée', 'info');
+        });
+    }
+    
+    // Mise à jour du contenu
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    
+    if (progressFill) {
+        progressFill.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
+    }
+    
+    if (progressText) {
+        progressText.textContent = message;
+    }
+    
+    progressOverlay.classList.remove('hidden');
+}
+
+/**
+ * Met à jour le progress
+ */
+function updateProgress(percentage, message) {
+    const progressFill = document.getElementById('progress-fill');
+    const progressText = document.getElementById('progress-text');
+    
+    if (progressFill) {
+        progressFill.style.width = `${Math.max(0, Math.min(100, percentage))}%`;
+    }
+    
+    if (progressText && message) {
+        progressText.textContent = message;
+    }
+}
+
+/**
+ * Cache le progress overlay
+ */
+function hideProgress() {
+    const progressOverlay = document.getElementById('global-progress');
+    if (progressOverlay) {
+        progressOverlay.classList.add('hidden');
+    }
+}
+
+// ==============================================================================
+// GESTION DES SECTIONS
+// ==============================================================================
+
+/**
+ * Affiche une section
+ */
+function showSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.remove('hidden');
+        
+        // Animation d'apparition
+        section.style.opacity = '0';
+        section.style.transform = 'translateY(20px)';
+        
+        requestAnimationFrame(() => {
+            section.style.transition = 'all 0.5s ease';
+            section.style.opacity = '1';
+            section.style.transform = 'translateY(0)';
+        });
+    }
+}
+
+/**
+ * Cache une section
+ */
+function hideSection(sectionId) {
+    const section = document.getElementById(sectionId);
+    if (section) {
+        section.classList.add('hidden');
+    }
+}
+
+/**
+ * Cache plusieurs sections
+ */
+function hideAllSections(sectionIds) {
+    sectionIds.forEach(sectionId => hideSection(sectionId));
+}
+
+// ==============================================================================
+// GESTIONNAIRE D'ERREURS GLOBALES
+// ==============================================================================
+
+/**
+ * Gestionnaire d'erreurs non capturées
+ */
+window.addEventListener('error', (event) => {
+    console.error('Erreur JavaScript:', event.error);
+    showNotification('Une erreur inattendue s\'est produite', 'error');
+});
+
+/**
+ * Gestionnaire de promesses rejetées
+ */
+window.addEventListener('unhandledrejection', (event) => {
+    console.error('Promesse rejetée:', event.reason);
+    showNotification('Erreur de traitement asynchrone', 'error');
+    event.preventDefault();
+});
+
+// ==============================================================================
+// INITIALISATION PRINCIPALE
+// ==============================================================================
+
+/**
+ * Initialise toute l'application
+ */
+function initializeApp() {
+    console.log('🚀 Initialisation de l\'application Malaysia Electricity Generator');
+    
+    // Initialiser tous les composants
+    initializeZoneSelector();
+    initializeGenerationForm();
+    initializeExportForm();
+    initializeTabs();
+    
+    // Nettoyer le cache au démarrage
+    clearCache();
+    
+    // Mise à jour du statut initial
+    updateStatus('Application prête');
+    
+    console.log('✅ Application initialisée avec succès');
+}
+
+/**
+ * Vérifie la compatibilité du navigateur
+ */
+function checkBrowserCompatibility() {
+    const features = {
+        fetch: typeof fetch !== 'undefined',
+        promises: typeof Promise !== 'undefined',
+        es6: typeof Map !== 'undefined',
+        localStorage: typeof localStorage !== 'undefined'
+    };
+    
+    const incompatible = Object.entries(features)
+        .filter(([feature, supported]) => !supported)
+        .map(([feature]) => feature);
+    
+    if (incompatible.length > 0) {
+        console.warn('⚠️ Fonctionnalités non supportées:', incompatible);
+        showNotification(
+            'Votre navigateur pourrait ne pas supporter toutes les fonctionnalités',
+            'warning',
+            10000
+        );
+    }
+    
+    return incompatible.length === 0;
+}
+
+// ==============================================================================
+// DÉMARRAGE DE L'APPLICATION
+// ==============================================================================
+
+// Attendre que le DOM soit chargé
+document.addEventListener('DOMContentLoaded', () => {
+    // Vérifier la compatibilité
+    checkBrowserCompatibility();
+    
+    // Initialiser l'application
+    initializeApp();
+    
+    // Exposer certaines fonctions globalement pour le débogage
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        window.debugApp = {
+            appState,
+            cache,
+            showNotification,
+            clearCache,
+            apiRequest
+        };
+        console.log('🐛 Mode debug activé - window.debugApp disponible');
+    }
+});
+
+// Nettoyage avant déchargement de la page
+window.addEventListener('beforeunload', () => {
+    cancelAllRequests();
+});
+
+console.log('📜 Script principal Malaysia Electricity Generator chargé');
