@@ -1,0 +1,303 @@
+{% extends "base.html" %}
+
+{% block title %}Générateur Malaysia - Accueil{% endblock %}
+{% block nav_home %}active{% endblock %}
+
+{% block content %}
+<!-- Section de sélection de zone -->
+<section class="zone-selection">
+    <h2>📍 Sélection de Zone Malaysia</h2>
+    
+    <div class="form-group">
+        <label for="zone-select">Zone à analyser :</label>
+        <select id="zone-select" class="form-control">
+            <option value="">-- Sélectionnez une zone --</option>
+            {% for zone in zones %}
+            <option value="{{ zone.zone_id }}" 
+                    data-buildings="{{ zone.estimated_buildings }}"
+                    data-complexity="{{ zone.complexity_level }}"
+                    data-recommended="{{ zone.recommended }}">
+                {{ zone.name }} ({{ zone.state }}) - {{ zone.estimated_buildings }} bâtiments
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+    
+    <!-- Informations sur la zone sélectionnée -->
+    <div id="zone-info" class="zone-info hidden">
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-label">Estimation:</span>
+                <span id="zone-buildings">-</span> bâtiments
+            </div>
+            <div class="info-item">
+                <span class="info-label">Temps estimé:</span>
+                <span id="zone-time">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Taille:</span>
+                <span id="zone-size">-</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Complexité:</span>
+                <span id="zone-complexity">-</span>
+            </div>
+        </div>
+        
+        <div id="zone-warnings" class="warnings hidden">
+            <!-- Les avertissements apparaîtront ici -->
+        </div>
+        
+        <button id="load-osm-btn" class="btn btn-primary" disabled>
+            🔄 Charger les Bâtiments OSM
+        </button>
+    </div>
+</section>
+
+<!-- Section des bâtiments OSM -->
+<section class="osm-buildings hidden" id="osm-section">
+    <h2>🏗️ Bâtiments OpenStreetMap</h2>
+    
+    <div class="osm-status">
+        <div class="status-item">
+            <span class="status-label">Bâtiments chargés:</span>
+            <span id="buildings-count">0</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Types détectés:</span>
+            <span id="building-types">-</span>
+        </div>
+        <div class="status-item">
+            <span class="status-label">Qualité:</span>
+            <span id="data-quality">-</span>
+        </div>
+    </div>
+    
+    <!-- Répartition par types -->
+    <div id="building-distribution" class="building-distribution">
+        <!-- Graphique de répartition sera inséré ici -->
+    </div>
+    
+    <!-- Carte simple (optionnelle) -->
+    <div id="buildings-map" class="buildings-map hidden">
+        <div class="map-placeholder">
+            📍 <span id="map-center">Carte des bâtiments</span>
+        </div>
+    </div>
+</section>
+
+<!-- Section de génération -->
+<section class="generation-config hidden" id="generation-section">
+    <h2>⚡ Configuration de Génération</h2>
+    
+    <form id="generation-form" class="generation-form">
+        <div class="form-row">
+            <div class="form-group">
+                <label for="start-date">Date de début :</label>
+                <input type="date" id="start-date" name="start_date" 
+                       value="2024-01-01" class="form-control">
+            </div>
+            
+            <div class="form-group">
+                <label for="end-date">Date de fin :</label>
+                <input type="date" id="end-date" name="end_date" 
+                       value="2024-01-31" class="form-control">
+            </div>
+            
+            <div class="form-group">
+                <label for="frequency">Fréquence :</label>
+                <select id="frequency" name="frequency" class="form-control">
+                    <option value="30T">30 minutes (recommandé)</option>
+                    <option value="1H">1 heure</option>
+                    <option value="15T">15 minutes</option>
+                    <option value="3H">3 heures</option>
+                    <option value="D">Quotidien</option>
+                </select>
+            </div>
+        </div>
+        
+        <!-- Estimation de génération -->
+        <div id="generation-estimate" class="estimate-box">
+            <h3>📊 Estimation de Génération</h3>
+            <div class="estimate-grid">
+                <div class="estimate-item">
+                    <span class="estimate-label">Observations:</span>
+                    <span id="estimate-observations">-</span>
+                </div>
+                <div class="estimate-item">
+                    <span class="estimate-label">Temps estimé:</span>
+                    <span id="estimate-time">-</span>
+                </div>
+                <div class="estimate-item">
+                    <span class="estimate-label">Taille données:</span>
+                    <span id="estimate-size">-</span>
+                </div>
+            </div>
+        </div>
+        
+        <div class="form-actions">
+            <button type="button" id="estimate-btn" class="btn btn-secondary">
+                📊 Estimer
+            </button>
+            
+            <button type="submit" id="generate-btn" class="btn btn-success" disabled>
+                ⚡ Générer les Données
+            </button>
+        </div>
+    </form>
+</section>
+
+<!-- Section de résultats -->
+<section class="results hidden" id="results-section">
+    <h2>📊 Résultats de Génération</h2>
+    
+    <!-- Statistiques -->
+    <div class="results-stats">
+        <div class="stat-card">
+            <div class="stat-number" id="result-buildings">-</div>
+            <div class="stat-label">Bâtiments</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="result-observations">-</div>
+            <div class="stat-label">Observations</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="result-quality">-</div>
+            <div class="stat-label">Qualité</div>
+        </div>
+        
+        <div class="stat-card">
+            <div class="stat-number" id="result-duration">-</div>
+            <div class="stat-label">Durée</div>
+        </div>
+    </div>
+    
+    <!-- Aperçu des données -->
+    <div class="data-preview">
+        <h3>👁️ Aperçu des Données</h3>
+        
+        <!-- Onglets de prévisualisation -->
+        <div class="preview-tabs">
+            <button class="tab-btn active" data-tab="buildings">Bâtiments</button>
+            <button class="tab-btn" data-tab="timeseries">Séries Temporelles</button>
+            <button class="tab-btn" data-tab="summary">Résumé</button>
+        </div>
+        
+        <!-- Contenu des onglets -->
+        <div class="tab-content">
+            <div id="tab-buildings" class="tab-pane active">
+                <div id="buildings-preview" class="data-table">
+                    <!-- Aperçu des métadonnées de bâtiments -->
+                </div>
+            </div>
+            
+            <div id="tab-timeseries" class="tab-pane">
+                <div id="timeseries-preview" class="data-table">
+                    <!-- Aperçu des séries temporelles -->
+                </div>
+            </div>
+            
+            <div id="tab-summary" class="tab-pane">
+                <div id="summary-content" class="summary-content">
+                    <!-- Résumé statistique -->
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Section d'export -->
+<section class="export-options hidden" id="export-section">
+    <h2>💾 Export des Données</h2>
+    
+    <form id="export-form" class="export-form">
+        <div class="export-formats">
+            <h3>Formats d'export :</h3>
+            
+            <div class="format-options">
+                <label class="format-option">
+                    <input type="checkbox" name="formats" value="csv" checked>
+                    <span class="format-label">
+                        📄 CSV
+                        <small>Compatible Excel, Python, R</small>
+                    </span>
+                </label>
+                
+                <label class="format-option">
+                    <input type="checkbox" name="formats" value="parquet" checked>
+                    <span class="format-label">
+                        🗜️ Parquet
+                        <small>Optimisé big data, compression</small>
+                    </span>
+                </label>
+                
+                <label class="format-option">
+                    <input type="checkbox" name="formats" value="xlsx">
+                    <span class="format-label">
+                        📊 Excel
+                        <small>Onglets multiples, compatible Office</small>
+                    </span>
+                </label>
+                
+                <label class="format-option">
+                    <input type="checkbox" name="formats" value="json">
+                    <span class="format-label">
+                        🔗 JSON
+                        <small>APIs web, applications JavaScript</small>
+                    </span>
+                </label>
+            </div>
+        </div>
+        
+        <div class="export-actions">
+            <button type="submit" id="export-btn" class="btn btn-primary">
+                💾 Exporter les Données
+            </button>
+        </div>
+    </form>
+    
+    <!-- Zone de téléchargement -->
+    <div id="download-section" class="download-section hidden">
+        <h3>📁 Fichiers Générés</h3>
+        <div id="download-links" class="download-links">
+            <!-- Les liens de téléchargement apparaîtront ici -->
+        </div>
+    </div>
+</section>
+
+<!-- Progress global -->
+<div id="global-progress" class="progress-overlay hidden">
+    <div class="progress-content">
+        <div class="progress-title">Traitement en cours...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
+        </div>
+        <div class="progress-text" id="progress-text">Initialisation...</div>
+        <button id="cancel-btn" class="btn btn-danger">Annuler</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/osm_map.js') }}"></script>
+<script>
+    // Initialisation de l'application
+    document.addEventListener('DOMContentLoaded', function() {
+        // Configuration globale
+        window.APP_CONFIG = {
+            apiBaseUrl: '/api',
+            maxBuildings: 10000,
+            defaultFrequency: '30T'
+        };
+        
+        // Initialisation des composants
+        initializeZoneSelector();
+        initializeGenerationForm();
+        initializeExportForm();
+        
+        console.log('✅ Application Malaysia Electricity Generator initialisée');
+    });
+</script>
+{% endblock %}

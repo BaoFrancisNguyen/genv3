@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Malaysia Electricity Generator{% endblock %}</title>
+    
+    <!-- Styles CSS épurés -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+    
+    <!-- Meta description -->
+    <meta name="description" content="Générateur de données électriques pour Malaysia avec données OSM réelles">
+    
+    <!-- Favicon simple -->
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body>
+    <!-- Header épuré -->
+    <header class="header">
+        <div class="container">
+            <h1 class="header-title">
+                <span class="flag">🇲🇾</span>
+                Malaysia Electricity Generator
+            </h1>
+            <p class="header-subtitle">Données électriques réalistes avec OpenStreetMap</p>
+        </div>
+    </header>
+
+    <!-- Navigation simple -->
+    <nav class="nav">
+        <div class="container">
+            <ul class="nav-list">
+                <li><a href="/" class="nav-link {% block nav_home %}{% endblock %}">🏠 Générateur</a></li>
+                <li><a href="/api/status" class="nav-link" target="_blank">📊 Statut API</a></li>
+                <li><a href="/api/zones" class="nav-link" target="_blank">📍 Zones</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Contenu principal -->
+    <main class="main">
+        <div class="container">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+
+    <!-- Zone de notifications -->
+    <div id="notifications" class="notifications">
+        <!-- Les notifications JS apparaîtront ici -->
+    </div>
+
+    <!-- Zone de statut globale -->
+    <div id="global-status" class="status-bar">
+        <span id="status-text">Prêt</span>
+        <div id="loading-indicator" class="loading hidden">
+            <div class="spinner"></div>
+        </div>
+    </div>
+
+    <!-- Footer minimal -->
+    <footer class="footer">
+        <div class="container">
+            <p class="footer-text">
+                Malaysia Electricity Generator - Version Refactorisée
+                <span class="separator">|</span>
+                <a href="/api/health" target="_blank">Health Check</a>
+                <span class="separator">|</span>
+                <a href="/api/statistics" target="_blank">Statistiques</a>
+            </p>
+        </div>
+    </footer>
+
+    <!-- Scripts JavaScript -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,83 @@
+# Requirements pour Malaysia Electricity Generator - Version Refactorisée
+# ========================================================================
+
+# Framework Web
+Flask==2.3.3
+Werkzeug==2.3.7
+
+# Manipulation de données principales
+pandas==2.1.1
+numpy==1.24.3
+pyarrow==13.0.0
+
+# Requests pour APIs OSM
+requests==2.31.0
+
+# Gestion des dates et temps
+python-dateutil==2.8.2
+
+# Support timezone Malaysia
+pytz==2023.3
+
+# Export Excel (optionnel)
+openpyxl==3.1.2
+
+# Validation de données (optionnel)
+jsonschema==4.19.1
+
+# Progress bars pour grandes générations (optionnel)
+tqdm==4.66.1
+
+# Logging coloré (optionnel)
+colorlog==6.7.0
+
+# JSON processing optimisé (optionnel)
+orjson==3.9.7
+
+# ==============================================================================
+# MODULES ESSENTIELS INCLUS
+# ==============================================================================
+# 
+# Le projet refactorisé inclut directement:
+# - src/models/building.py (Modèle Building)
+# - src/models/timeseries.py (Modèle TimeSeries)  
+# - src/core/osm_handler.py (Gestionnaire OSM)
+# - src/core/generator.py (Générateur électricité)
+# - src/core/data_exporter.py (Exporteur données)
+# - src/services/ (Services métier)
+# - config.py (Configuration centralisée)
+# 
+# ==============================================================================
+# INSTALLATION
+# ==============================================================================
+#
+# Installation minimale (fonctionnalités de base):
+#   pip install Flask pandas numpy pyarrow requests python-dateutil
+#
+# Installation complète (toutes fonctionnalités):
+#   pip install -r requirements.txt
+#
+# Installation avec environnement virtuel (recommandé):
+#   python -m venv venv
+#   venv\Scripts\activate  # Windows
+#   source venv/bin/activate  # Linux/Mac
+#   pip install -r requirements.txt
+#
+# ==============================================================================
+# COMPATIBILITÉ
+# ==============================================================================
+#
+# Python: 3.8+ requis
+# OS: Windows, Linux, macOS
+# RAM: 2GB minimum, 4GB recommandé pour gros datasets
+# Espace disque: 100MB + espace pour exports
+#
+# ==============================================================================
+# VERSIONS TESTÉES
+# ==============================================================================
+#
+# ✅ Python 3.8.10
+# ✅ Python 3.9.16  
+# ✅ Python 3.10.11
+# ✅ Python 3.11.8
+# ✅ Python 3.12.2
