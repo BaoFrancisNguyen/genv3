@@ -47,38 +47,153 @@ class OSMService:
     
     def get_available_zones(self) -> List[Dict]:
         """
-        Retourne la liste des zones disponibles pour OSM
+        Retourne la liste complète des zones disponibles pour OSM
         
         Returns:
-            List[Dict]: Zones disponibles avec métadonnées
+            List[Dict]: Zones disponibles avec métadonnées complètes
         """
         try:
             zones = []
             
-            # Zones principales de Malaysia
-            for zone_id, zone_data in MALAYSIA_ZONES.MAJOR_ZONES.items():
-                zone_info = {
-                    'zone_id': zone_id,
-                    'name': zone_data['name'],
-                    'state': zone_data['state'],
-                    'population': zone_data['population'],
-                    'estimated_buildings': zone_data.get('estimated_buildings', 'Unknown'),
-                    'area_km2': zone_data.get('area_km2', 0),
-                    'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 1000)),
-                    'has_osm_relation': bool(zone_data.get('osm_relation_id')),
-                    'recommended': zone_data.get('estimated_buildings', 1000) < 50000
-                }
-                zones.append(zone_info)
+            # Malaysia entière
+            if hasattr(MALAYSIA_ZONES, 'COUNTRY'):
+                for zone_id, zone_data in MALAYSIA_ZONES.COUNTRY.items():
+                    zone_info = {
+                        'zone_id': zone_id,
+                        'name': zone_data['name'],
+                        'type': zone_data.get('type', 'country'),
+                        'population': zone_data.get('population', 0),
+                        'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                        'area_km2': zone_data.get('area_km2', 0),
+                        'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                        'has_osm_relation': bool(zone_data.get('osm_relation_id')),
+                        'recommended': False,  # Pays entier non recommandé
+                        'warning': zone_data.get('warning', ''),
+                        'bbox': zone_data.get('bbox', [])
+                    }
+                    zones.append(zone_info)
             
-            # Tri par population (plus grande en premier)
-            zones.sort(key=lambda x: x['population'], reverse=True)
+            # États
+            if hasattr(MALAYSIA_ZONES, 'STATES'):
+                for zone_id, zone_data in MALAYSIA_ZONES.STATES.items():
+                    zone_info = {
+                        'zone_id': zone_id,
+                        'name': zone_data['name'],
+                        'type': zone_data.get('type', 'state'),
+                        'population': zone_data.get('population', 0),
+                        'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                        'area_km2': zone_data.get('area_km2', 0),
+                        'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                        'has_osm_relation': bool(zone_data.get('osm_relation_id')),
+                        'recommended': zone_data.get('estimated_buildings', 0) < 300000,
+                        'capital': zone_data.get('capital', ''),
+                        'bbox': zone_data.get('bbox', [])
+                    }
+                    zones.append(zone_info)
+            
+            # Territoires fédéraux
+            if hasattr(MALAYSIA_ZONES, 'FEDERAL_TERRITORIES'):
+                for zone_id, zone_data in MALAYSIA_ZONES.FEDERAL_TERRITORIES.items():
+                    zone_info = {
+                        'zone_id': zone_id,
+                        'name': zone_data['name'],
+                        'type': zone_data.get('type', 'federal_territory'),
+                        'population': zone_data.get('population', 0),
+                        'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                        'area_km2': zone_data.get('area_km2', 0),
+                        'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                        'has_osm_relation': bool(zone_data.get('osm_relation_id')),
+                        'recommended': True,  # Territoires fédéraux recommandés
+                        'bbox': zone_data.get('bbox', [])
+                    }
+                    zones.append(zone_info)
+            
+            # Villes principales
+            if hasattr(MALAYSIA_ZONES, 'MAJOR_CITIES'):
+                for zone_id, zone_data in MALAYSIA_ZONES.MAJOR_CITIES.items():
+                    # Éviter les doublons (déjà dans territoires fédéraux)
+                    if zone_id not in ['kuala_lumpur', 'putrajaya', 'labuan']:
+                        zone_info = {
+                            'zone_id': zone_id,
+                            'name': zone_data['name'],
+                            'type': 'city',
+                            'state': zone_data.get('state', ''),
+                            'population': zone_data.get('population', 0),
+                            'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                            'area_km2': zone_data.get('area_km2', 0),
+                            'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                            'has_osm_relation': bool(zone_data.get('osm_relation_id')),
+                            'recommended': zone_data.get('estimated_buildings', 0) < 100000,
+                            'importance': zone_data.get('importance', ''),
+                            'bbox': zone_data.get('bbox', [])
+                        }
+                        zones.append(zone_info)
+            
+            # Régions spéciales
+            if hasattr(MALAYSIA_ZONES, 'SPECIAL_REGIONS'):
+                for zone_id, zone_data in MALAYSIA_ZONES.SPECIAL_REGIONS.items():
+                    zone_info = {
+                        'zone_id': zone_id,
+                        'name': zone_data['name'],
+                        'type': zone_data.get('type', 'special'),
+                        'description': zone_data.get('description', ''),
+                        'population': zone_data.get('population', 0),
+                        'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                        'area_km2': zone_data.get('area_km2', 0),
+                        'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                        'has_osm_relation': False,  # Régions spéciales n'ont pas de relation OSM directe
+                        'recommended': False,  # Régions complexes
+                        'cities': zone_data.get('cities', []),
+                        'bbox': zone_data.get('bbox', [])
+                    }
+                    zones.append(zone_info)
+            
+            # Fallback vers l'ancienne configuration si la nouvelle n'existe pas
+            if not zones and hasattr(MALAYSIA_ZONES, 'MAJOR_ZONES'):
+                logger.info("🔄 Utilisation de l'ancienne configuration MAJOR_ZONES")
+                for zone_id, zone_data in MALAYSIA_ZONES.MAJOR_ZONES.items():
+                    zone_info = {
+                        'zone_id': zone_id,
+                        'name': zone_data['name'],
+                        'type': 'city',
+                        'state': zone_data.get('state', ''),
+                        'population': zone_data.get('population', 0),
+                        'estimated_buildings': zone_data.get('estimated_buildings', 0),
+                        'area_km2': zone_data.get('area_km2', 0),
+                        'complexity_level': self._get_complexity_level(zone_data.get('estimated_buildings', 0)),
+                        'has_osm_relation': bool(zone_data.get('osm_relation_id')),
+                        'recommended': zone_data.get('estimated_buildings', 0) < 100000,
+                        'bbox': zone_data.get('bbox', [])
+                    }
+                    zones.append(zone_info)
+            
+            # Tri par complexité (simple en premier) puis par population
+            zones.sort(key=lambda x: (
+                {'simple': 1, 'modéré': 2, 'complexe': 3, 'très_complexe': 4, 'extrême': 5}.get(x['complexity_level'], 3),
+                -x['population']
+            ))
             
             logger.info(f"📍 {len(zones)} zones disponibles")
             return zones
             
         except Exception as e:
             logger.error(f"❌ Erreur récupération zones: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return []
+    
+    def _get_complexity_level(self, estimated_buildings: int) -> str:
+        """Détermine le niveau de complexité selon le nombre de bâtiments"""
+        if estimated_buildings < 10000:
+            return 'simple'
+        elif estimated_buildings < 50000:
+            return 'modéré'
+        elif estimated_buildings < 200000:
+            return 'complexe'
+        elif estimated_buildings < 1000000:
+            return 'très_complexe'
+        else:
+            return 'extrême'
     
     def get_zone_estimation(self, zone_name: str) -> Dict:
         """
@@ -91,70 +206,124 @@ class OSMService:
             Dict: Estimation détaillée avec recommandations
         """
         try:
-            # Délégation au gestionnaire OSM
-            estimation = self.osm_handler.get_zone_estimation(zone_name)
+            # Chercher la zone dans toutes les catégories
+            zone_data = self._find_zone_in_all_categories(zone_name)
             
-            if not estimation.get('zone_found', False):
-                return {
-                    'success': False,
-                    'error': f"Zone '{zone_name}' non trouvée",
-                    'available_zones': [z['zone_id'] for z in self.get_available_zones()]
-                }
+            if not zone_data:
+                # Délégation au gestionnaire OSM pour compatibilité
+                estimation = self.osm_handler.get_zone_estimation(zone_name)
+                return estimation
             
-            # Enrichissement avec logique métier
-            estimated_buildings = estimation.get('estimated_buildings', 0)
+            # Calculs d'estimation
+            estimated_buildings = zone_data.get('estimated_buildings', 1000)
+            area_km2 = zone_data.get('area_km2', 100)
             
-            # Ajout de warnings et recommandations
+            # Estimation du temps (base: 50000 bâtiments/minute)
+            estimated_time_minutes = max(0.1, estimated_buildings / 50000)
+            
+            # Estimation de la taille (base: 200 bytes/bâtiment/jour)
+            estimated_size_mb = max(0.1, (estimated_buildings * 200 * 31) / (1024 * 1024))  # 31 jours par défaut
+            
+            # Niveau de complexité
+            complexity_level = self._get_complexity_level(estimated_buildings)
+            
+            # Recommandations selon la complexité
+            recommendations = {
+                'simple': 'Génération rapide recommandée',
+                'modéré': 'Génération standard, quelques minutes',
+                'complexe': 'Génération longue, soyez patient',
+                'très_complexe': 'Génération très longue, considérer la subdivision en zones plus petites',
+                'extrême': 'Génération extrêmement longue (plusieurs heures), fortement recommandé de subdiviser'
+            }
+            
+            # Warnings spéciaux
             warnings = []
-            recommendations = []
+            if estimated_buildings > 1000000:
+                warnings.append("ATTENTION: Volume très élevé - génération de plusieurs heures")
+            if estimated_buildings > 500000:
+                warnings.append("Assurez-vous d'avoir suffisamment de mémoire RAM")
+            if complexity_level == 'extrême':
+                warnings.append("Considérez utiliser une fréquence quotidienne plutôt qu'horaire")
             
-            if estimated_buildings > 100000:
-                warnings.append("Très grande zone - temps de traitement long")
-                recommendations.append("Considérer subdiviser la requête")
-            elif estimated_buildings > 50000:
-                warnings.append("Grande zone - soyez patient")
-                recommendations.append("Prévoir 10-15 minutes de traitement")
-            
-            if estimation.get('estimated_time_minutes', 0) > 10:
-                recommendations.append("Requête longue - ne pas fermer le navigateur")
-            
-            # Enrichissement de l'estimation
-            enriched_estimation = estimation.copy()
-            enriched_estimation.update({
-                'success': True,
+            return {
+                'zone_found': True,
+                'zone_name': zone_data['name'],
+                'zone_type': zone_data.get('type', 'unknown'),
+                'estimated_buildings': estimated_buildings,
+                'area_km2': area_km2,
+                'estimated_time_minutes': round(estimated_time_minutes, 1),
+                'estimated_size_mb': round(estimated_size_mb, 1),
+                'complexity_level': complexity_level,
+                'recommendation': recommendations.get(complexity_level, 'Complexité inconnue'),
                 'warnings': warnings,
-                'recommendations': recommendations,
-                'suitable_for_demo': estimated_buildings < 10000,
-                'requires_patience': estimated_buildings > 25000,
-                'risk_level': self._assess_risk_level(estimated_buildings)
-            })
-            
-            return enriched_estimation
+                'bbox': zone_data.get('bbox', []),
+                'has_osm_relation': bool(zone_data.get('osm_relation_id'))
+            }
             
         except Exception as e:
             logger.error(f"❌ Erreur estimation zone {zone_name}: {str(e)}")
             return {
-                'success': False,
-                'error': str(e)
+                'zone_found': False,
+                'error': f"Erreur lors de l'estimation: {str(e)}"
             }
+    
+    def _find_zone_in_all_categories(self, zone_name: str) -> Optional[Dict]:
+        """
+        Cherche une zone dans toutes les catégories disponibles
+        
+        Args:
+            zone_name: Nom de la zone à chercher
+            
+        Returns:
+            Optional[Dict]: Données de la zone ou None si non trouvée
+        """
+        # Chercher dans toutes les catégories
+        categories = []
+        
+        if hasattr(MALAYSIA_ZONES, 'COUNTRY'):
+            categories.append(MALAYSIA_ZONES.COUNTRY)
+        if hasattr(MALAYSIA_ZONES, 'STATES'):
+            categories.append(MALAYSIA_ZONES.STATES)
+        if hasattr(MALAYSIA_ZONES, 'FEDERAL_TERRITORIES'):
+            categories.append(MALAYSIA_ZONES.FEDERAL_TERRITORIES)
+        if hasattr(MALAYSIA_ZONES, 'MAJOR_CITIES'):
+            categories.append(MALAYSIA_ZONES.MAJOR_CITIES)
+        if hasattr(MALAYSIA_ZONES, 'SPECIAL_REGIONS'):
+            categories.append(MALAYSIA_ZONES.SPECIAL_REGIONS)
+        
+        # Fallback vers MAJOR_ZONES si les nouvelles catégories n'existent pas
+        if not categories and hasattr(MALAYSIA_ZONES, 'MAJOR_ZONES'):
+            categories.append(MALAYSIA_ZONES.MAJOR_ZONES)
+        
+        for category in categories:
+            if zone_name.lower() in category:
+                return category[zone_name.lower()]
+        
+        return None
     
     def load_complete_zone_buildings(self, zone_name: str) -> Dict:
         """
-        Charge tous les bâtiments d'une zone avec gestion complète
+        Charge tous les bâtiments OSM d'une zone complète
         
         Args:
-            zone_name: Nom de la zone à charger
+            zone_name: Nom de la zone
             
         Returns:
-            Dict: Résultats avec bâtiments et métadonnées
+            Dict: Résultat du chargement avec bâtiments et métadonnées
         """
         try:
             logger.info(f"🔄 Début chargement zone complète: {zone_name}")
             
-            # Pré-validation de la zone
-            estimation = self.get_zone_estimation(zone_name)
-            if not estimation.get('success', False):
-                return estimation
+            # Validation du nom de zone
+            is_valid, error = self._validate_zone_name(zone_name)
+            if not is_valid:
+                self.service_statistics['failed_queries'] += 1
+                return {
+                    'success': False,
+                    'zone_name': zone_name,
+                    'error': error,
+                    'buildings': []
+                }
             
             # Exécution de la requête OSM
             osm_result = self.osm_handler.get_complete_locality_buildings(zone_name)
@@ -207,6 +376,86 @@ class OSMService:
                 'buildings': []
             }
     
+    def _validate_zone_name(self, zone_name: str) -> tuple:
+        """Valide le nom d'une zone"""
+        if not zone_name or not isinstance(zone_name, str):
+            return False, "Nom de zone invalide"
+        
+        # Caractères autorisés
+        allowed_chars = set('abcdefghijklmnopqrstuvwxyz_-')
+        if not all(c in allowed_chars for c in zone_name.lower()):
+            return False, "Nom de zone contient des caractères non autorisés"
+        
+        return True, None
+    
+    def _calculate_quality_metrics(self, buildings: List[Building]) -> Dict:
+        """Calcule les métriques de qualité pour une liste de bâtiments"""
+        if not buildings:
+            return {'quality_score': 0}
+        
+        total = len(buildings)
+        
+        # Métriques de base
+        with_osm_tags = sum(1 for b in buildings if b.osm_tags)
+        valid_coords = sum(1 for b in buildings if 0.5 <= b.latitude <= 7.5 and 99.0 <= b.longitude <= 120.0)
+        valid_surface = sum(1 for b in buildings if b.surface_area_m2 > 0)
+        
+        # Score global
+        completeness_score = (with_osm_tags / total) * 100
+        coord_score = (valid_coords / total) * 100
+        surface_score = (valid_surface / total) * 100
+        
+        overall_score = (completeness_score + coord_score + surface_score) / 3
+        
+        return {
+            'quality_score': round(overall_score, 1),
+            'completeness_percent': round(completeness_score, 1),
+            'valid_coordinates_percent': round(coord_score, 1),
+            'valid_surface_percent': round(surface_score, 1),
+            'total_buildings': total
+        }
+    
+    def _generate_building_statistics(self, buildings: List[Building]) -> Dict:
+        """Génère des statistiques sur les bâtiments"""
+        if not buildings:
+            return {}
+        
+        # Comptage par type
+        type_counts = {}
+        total_surface = 0
+        total_consumption = 0
+        
+        for building in buildings:
+            # Type de bâtiment
+            building_type = building.building_type or 'unknown'
+            type_counts[building_type] = type_counts.get(building_type, 0) + 1
+            
+            # Totaux
+            total_surface += building.surface_area_m2
+            total_consumption += building.base_consumption_kwh
+        
+        return {
+            'type_distribution': type_counts,
+            'total_surface_m2': round(total_surface, 1),
+            'average_surface_m2': round(total_surface / len(buildings), 1),
+            'total_consumption_kwh_per_day': round(total_consumption, 1),
+            'average_consumption_kwh_per_day': round(total_consumption / len(buildings), 1)
+        }
+    
+    def _get_fallback_suggestions(self, zone_name: str) -> List[str]:
+        """Génère des suggestions en cas d'échec"""
+        suggestions = [
+            "Vérifiez l'orthographe du nom de zone",
+            "Essayez une zone plus petite",
+            "Consultez la liste des zones disponibles"
+        ]
+        
+        # Suggestions spécifiques selon le nom
+        if 'malaysia' in zone_name.lower():
+            suggestions.append("Le pays entier peut prendre plusieurs heures - essayez un état spécifique")
+        
+        return suggestions
+    
     def test_connection(self) -> bool:
         """
         Teste la connexion aux services OSM
@@ -215,48 +464,36 @@ class OSMService:
             bool: True si la connexion fonctionne
         """
         try:
-            # Test via une petite requête
             from src.core.osm_handler import test_osm_connection
             return test_osm_connection()
-            
         except Exception as e:
-            logger.error(f"❌ Test connexion OSM échoué: {str(e)}")
+            logger.error(f"❌ Erreur test connexion OSM: {str(e)}")
             return False
     
     def get_service_status(self) -> Dict:
         """
-        Retourne l'état du service OSM
+        Retourne le statut du service OSM
         
         Returns:
-            Dict: État détaillé du service
+            Dict: Statut et statistiques du service
         """
         uptime = datetime.now() - self.service_statistics['service_start_time']
-        connection_ok = self.test_connection()
-        
-        total_queries = (
-            self.service_statistics['successful_queries'] + 
-            self.service_statistics['failed_queries']
-        )
         
         success_rate = 0
+        total_queries = self.service_statistics['successful_queries'] + self.service_statistics['failed_queries']
         if total_queries > 0:
             success_rate = (self.service_statistics['successful_queries'] / total_queries) * 100
         
         return {
             'service_name': 'OSM Service',
-            'status': 'active' if connection_ok else 'degraded',
-            'connection_ok': connection_ok,
+            'status': 'active',
+            'connection_ok': self.test_connection(),
             'uptime_seconds': int(uptime.total_seconds()),
             'statistics': {
                 'successful_queries': self.service_statistics['successful_queries'],
                 'failed_queries': self.service_statistics['failed_queries'],
-                'total_buildings_loaded': self.service_statistics['total_buildings_loaded'],
-                'success_rate_percent': round(success_rate, 1)
-            },
-            'last_query': {
-                'exists': self.last_query_result is not None,
-                'buildings_count': len(self.last_query_result.buildings) if self.last_query_result else 0,
-                'query_time': self.last_query_result.query_time_seconds if self.last_query_result else 0
+                'success_rate_percent': round(success_rate, 1),
+                'total_buildings_loaded': self.service_statistics['total_buildings_loaded']
             }
         }
     
@@ -267,300 +504,4 @@ class OSMService:
         Returns:
             Dict: Statistiques complètes
         """
-        stats = self.service_statistics.copy()
-        
-        # Ajout des statistiques du gestionnaire OSM
-        osm_stats = self.osm_handler.get_statistics()
-        stats.update({
-            'osm_handler_stats': osm_stats,
-            'available_zones_count': len(self.get_available_zones())
-        })
-        
-        return stats
-    
-    def _get_complexity_level(self, estimated_buildings: int) -> str:
-        """
-        Détermine le niveau de complexité d'une zone
-        
-        Args:
-            estimated_buildings: Nombre estimé de bâtiments
-            
-        Returns:
-            str: Niveau de complexité
-        """
-        if estimated_buildings < 5000:
-            return 'simple'
-        elif estimated_buildings < 25000:
-            return 'modéré'
-        elif estimated_buildings < 100000:
-            return 'complexe'
-        else:
-            return 'très_complexe'
-    
-    def _assess_risk_level(self, estimated_buildings: int) -> str:
-        """
-        Évalue le niveau de risque d'une requête
-        
-        Args:
-            estimated_buildings: Nombre estimé de bâtiments
-            
-        Returns:
-            str: Niveau de risque
-        """
-        if estimated_buildings < 10000:
-            return 'faible'
-        elif estimated_buildings < 50000:
-            return 'modéré'
-        elif estimated_buildings < 200000:
-            return 'élevé'
-        else:
-            return 'très_élevé'
-    
-    def _calculate_quality_metrics(self, buildings: List[Building]) -> Dict:
-        """
-        Calcule les métriques de qualité des bâtiments chargés
-        
-        Args:
-            buildings: Liste des bâtiments
-            
-        Returns:
-            Dict: Métriques de qualité
-        """
-        if not buildings:
-            return {'quality_score': 0, 'issues': ['Aucun bâtiment chargé']}
-        
-        metrics = {
-            'total_buildings': len(buildings),
-            'buildings_with_osm_id': 0,
-            'buildings_with_coordinates': 0,
-            'buildings_with_type': 0,
-            'buildings_with_surface': 0,
-            'unique_types_count': 0,
-            'coordinate_validity': 0,
-            'quality_score': 0,
-            'issues': []
-        }
-        
-        # Analyse des bâtiments
-        valid_coordinates = 0
-        building_types = set()
-        
-        for building in buildings:
-            # OSM ID
-            if building.osm_id:
-                metrics['buildings_with_osm_id'] += 1
-            
-            # Coordonnées
-            if building.latitude and building.longitude:
-                metrics['buildings_with_coordinates'] += 1
-                
-                # Validation coordonnées Malaysia
-                if (0.5 <= building.latitude <= 7.5 and 
-                    99.0 <= building.longitude <= 120.0):
-                    valid_coordinates += 1
-            
-            # Type de bâtiment
-            if building.building_type and building.building_type != 'unknown':
-                metrics['buildings_with_type'] += 1
-                building_types.add(building.building_type)
-            
-            # Surface
-            if building.surface_area_m2 > 0:
-                metrics['buildings_with_surface'] += 1
-        
-        # Calculs des pourcentages
-        total = len(buildings)
-        metrics['coordinate_validity'] = (valid_coordinates / total) * 100
-        metrics['unique_types_count'] = len(building_types)
-        
-        # Calcul du score de qualité global
-        completeness_score = (
-            (metrics['buildings_with_coordinates'] / total) * 30 +
-            (metrics['buildings_with_type'] / total) * 25 +
-            (metrics['buildings_with_surface'] / total) * 20 +
-            (metrics['buildings_with_osm_id'] / total) * 15 +
-            (valid_coordinates / total) * 10
-        )
-        
-        metrics['quality_score'] = round(completeness_score, 1)
-        
-        # Identification des problèmes
-        if metrics['coordinate_validity'] < 95:
-            metrics['issues'].append(f"Coordonnées invalides: {100 - metrics['coordinate_validity']:.1f}%")
-        
-        if metrics['unique_types_count'] < 3:
-            metrics['issues'].append("Diversité de types de bâtiments faible")
-        
-        if metrics['buildings_with_surface'] < total * 0.8:
-            metrics['issues'].append("Données de surface manquantes")
-        
-        return metrics
-    
-    def _generate_building_statistics(self, buildings: List[Building]) -> Dict:
-        """
-        Génère des statistiques sur les bâtiments chargés
-        
-        Args:
-            buildings: Liste des bâtiments
-            
-        Returns:
-            Dict: Statistiques des bâtiments
-        """
-        if not buildings:
-            return {}
-        
-        # Distribution par type
-        type_distribution = {}
-        surface_stats = []
-        
-        for building in buildings:
-            # Comptage par type
-            building_type = building.building_type or 'unknown'
-            type_distribution[building_type] = type_distribution.get(building_type, 0) + 1
-            
-            # Statistiques de surface
-            if building.surface_area_m2 > 0:
-                surface_stats.append(building.surface_area_m2)
-        
-        # Calculs statistiques de surface
-        surface_statistics = {}
-        if surface_stats:
-            import statistics
-            surface_statistics = {
-                'moyenne_m2': round(statistics.mean(surface_stats), 1),
-                'mediane_m2': round(statistics.median(surface_stats), 1),
-                'min_m2': min(surface_stats),
-                'max_m2': max(surface_stats),
-                'total_m2': sum(surface_stats)
-            }
-        
-        return {
-            'distribution_types': type_distribution,
-            'type_le_plus_commun': max(type_distribution.items(), key=lambda x: x[1])[0] if type_distribution else None,
-            'surface_statistics': surface_statistics,
-            'buildings_avec_surface': len(surface_stats),
-            'pourcentage_avec_surface': (len(surface_stats) / len(buildings)) * 100
-        }
-    
-    def _get_fallback_suggestions(self, zone_name: str) -> List[str]:
-        """
-        Génère des suggestions en cas d'échec de chargement
-        
-        Args:
-            zone_name: Nom de la zone qui a échoué
-            
-        Returns:
-            List[str]: Liste de suggestions
-        """
-        suggestions = [
-            "Vérifier la connexion internet",
-            "Réessayer dans quelques minutes",
-            "Choisir une zone plus petite",
-        ]
-        
-        # Suggestions spécifiques selon la zone
-        available_zones = self.get_available_zones()
-        smaller_zones = [z for z in available_zones if z.get('estimated_buildings', 0) < 25000]
-        
-        if smaller_zones:
-            suggestions.append(f"Essayer une zone plus petite comme: {smaller_zones[0]['name']}")
-        
-        return suggestions
-
-
-# ==============================================================================
-# FONCTIONS UTILITAIRES DU SERVICE
-# ==============================================================================
-
-def validate_zone_name(zone_name: str) -> tuple:
-    """
-    Valide qu'un nom de zone est acceptable
-    
-    Args:
-        zone_name: Nom de la zone à valider
-        
-    Returns:
-        tuple: (valid, error_message)
-    """
-    if not zone_name:
-        return False, "Nom de zone requis"
-    
-    if not isinstance(zone_name, str):
-        return False, "Nom de zone doit être une chaîne"
-    
-    if len(zone_name.strip()) < 2:
-        return False, "Nom de zone trop court"
-    
-    # Vérification caractères autorisés
-    allowed_chars = set('abcdefghijklmnopqrstuvwxyz_-')
-    if not all(c in allowed_chars for c in zone_name.lower()):
-        return False, "Nom de zone contient des caractères non autorisés"
-    
-    return True, None
-
-
-def format_building_summary(buildings: List[Building]) -> str:
-    """
-    Formate un résumé textuel des bâtiments
-    
-    Args:
-        buildings: Liste des bâtiments
-        
-    Returns:
-        str: Résumé formaté
-    """
-    if not buildings:
-        return "Aucun bâtiment trouvé"
-    
-    # Comptage par type
-    type_counts = {}
-    for building in buildings:
-        building_type = building.building_type or 'unknown'
-        type_counts[building_type] = type_counts.get(building_type, 0) + 1
-    
-    # Tri par fréquence
-    sorted_types = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)
-    
-    # Construction du résumé
-    summary_parts = [f"{len(buildings)} bâtiments total"]
-    
-    for building_type, count in sorted_types[:5]:  # Top 5 types
-        percentage = (count / len(buildings)) * 100
-        summary_parts.append(f"{building_type}: {count} ({percentage:.1f}%)")
-    
-    if len(sorted_types) > 5:
-        remaining = sum(count for _, count in sorted_types[5:])
-        summary_parts.append(f"autres: {remaining}")
-    
-    return " | ".join(summary_parts)
-
-
-# ==============================================================================
-# EXEMPLE D'UTILISATION
-# ==============================================================================
-
-if __name__ == '__main__':
-    # Test du service OSM
-    from src.core.osm_handler import OSMHandler
-    
-    # Initialisation
-    osm_handler = OSMHandler()
-    osm_service = OSMService(osm_handler)
-    
-    # Test connexion
-    print(f"🔗 Connexion OSM: {'✅ OK' if osm_service.test_connection() else '❌ Échec'}")
-    
-    # Liste des zones
-    zones = osm_service.get_available_zones()
-    print(f"📍 {len(zones)} zones disponibles:")
-    for zone in zones[:3]:
-        print(f"  - {zone['name']}: {zone['estimated_buildings']} bâtiments estimés")
-    
-    # Estimation pour une zone
-    estimation = osm_service.get_zone_estimation('kuala_lumpur')
-    if estimation.get('success'):
-        print(f"⏱️ Estimation KL: {estimation['estimated_time_minutes']} min, {estimation['estimated_size_mb']} MB")
-    
-    # Statut du service
-    status = osm_service.get_service_status()
-    print(f"📊 Service: {status['status']}, {status['statistics']['success_rate_percent']}% succès")
+        return self.service_statistics.copy()

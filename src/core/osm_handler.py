@@ -12,6 +12,7 @@ import time
 import logging
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass
+import math
 
 from config import OSM_CONFIG, MALAYSIA_ZONES
 from src.models.building import Building
@@ -134,26 +135,45 @@ class OSMHandler:
             )
     
     def _get_zone_configuration(self, zone_name: str) -> Optional[Dict]:
-        """
-        Récupère la configuration d'une zone depuis les données Malaysia
-        
-        Args:
-            zone_name: Nom de la zone
+            """
+            Récupère la configuration d'une zone depuis les données Malaysia
             
-        Returns:
-            Dict: Configuration de la zone ou None si non trouvée
-        """
-        # Recherche dans les zones principales
-        zone_data = MALAYSIA_ZONES.MAJOR_ZONES.get(zone_name.lower())
-        
-        if zone_data:
-            # Ajouter le type de zone
-            zone_data['type'] = 'major_city'
-            return zone_data
-        
-        # TODO: Ajouter recherche dans d'autres sources (API, fichiers JSON)
-        logger.warning(f"⚠️ Zone {zone_name} non trouvée dans la configuration")
-        return None
+            Args:
+                zone_name: Nom de la zone
+                
+            Returns:
+                Dict: Configuration de la zone ou None si non trouvée
+            """
+            # Chercher dans toutes les catégories de la nouvelle structure
+            categories_to_search = []
+            
+            if hasattr(MALAYSIA_ZONES, 'COUNTRY'):
+                categories_to_search.append(MALAYSIA_ZONES.COUNTRY)
+            if hasattr(MALAYSIA_ZONES, 'STATES'):
+                categories_to_search.append(MALAYSIA_ZONES.STATES)
+            if hasattr(MALAYSIA_ZONES, 'FEDERAL_TERRITORIES'):
+                categories_to_search.append(MALAYSIA_ZONES.FEDERAL_TERRITORIES)
+            if hasattr(MALAYSIA_ZONES, 'MAJOR_CITIES'):
+                categories_to_search.append(MALAYSIA_ZONES.MAJOR_CITIES)
+            if hasattr(MALAYSIA_ZONES, 'SPECIAL_REGIONS'):
+                categories_to_search.append(MALAYSIA_ZONES.SPECIAL_REGIONS)
+            
+            # Fallback vers l'ancienne structure si la nouvelle n'existe pas
+            if not categories_to_search and hasattr(MALAYSIA_ZONES, 'MAJOR_ZONES'):
+                categories_to_search.append(MALAYSIA_ZONES.MAJOR_ZONES)
+            
+            # Rechercher dans chaque catégorie
+            for category in categories_to_search:
+                zone_data = category.get(zone_name.lower())
+                if zone_data:
+                    # Ajouter le type de zone et faire une copie pour éviter de modifier l'original
+                    zone_data = zone_data.copy()
+                    if 'type' not in zone_data:
+                        zone_data['type'] = 'unknown'
+                    return zone_data
+            
+            logger.warning(f"⚠️ Zone {zone_name} non trouvée dans la configuration")
+            return None
     
     def _build_complete_overpass_query(self, zone_data: Dict) -> str:
         """
@@ -167,26 +187,9 @@ class OSMHandler:
         """
         timeout = OSM_CONFIG.TIMEOUT_SECONDS
         
-        # Utiliser la relation OSM si disponible (plus précis)
-        if zone_data.get('osm_relation_id'):
-            query = f"""
-            [out:json][timeout:{timeout}][maxsize:1073741824];
-            (
-                rel({zone_data['osm_relation_id']});
-                map_to_area -> .searchArea;
-            );
-            (
-                way["building"](area.searchArea);
-                relation["building"](area.searchArea);
-            );
-            out geom;
-            """
-        else:
-            # Fallback avec bounding box
-            bbox = zone_data.get('bbox', [])
-            if len(bbox) != 4:
-                raise ValueError(f"Bounding box invalide pour {zone_data['name']}")
-            
+        # PRIORITÉ 1: Utiliser bbox directement (plus fiable que les relations)
+        bbox = zone_data.get('bbox', [])
+        if len(bbox) == 4:
             west, south, east, north = bbox
             query = f"""
             [out:json][timeout:{timeout}][maxsize:1073741824];
@@ -196,8 +199,29 @@ class OSMHandler:
             );
             out geom;
             """
+            logger.info(f"🗺️ Utilisation bbox: [{west}, {south}, {east}, {north}]")
+            return query.strip()
         
-        return query.strip()
+        # PRIORITÉ 2: Fallback avec relation OSM si bbox non disponible
+        elif zone_data.get('osm_relation_id'):
+            relation_id = zone_data['osm_relation_id']
+            query = f"""
+            [out:json][timeout:{timeout}][maxsize:1073741824];
+            (
+                relation({relation_id});
+                map_to_area -> .searchArea;
+            );
+            (
+                way["building"](area.searchArea);
+                relation["building"](area.searchArea);
+            );
+            out geom;
+            """
+            logger.info(f"🔗 Utilisation relation OSM: {relation_id}")
+            return query.strip()
+        
+        else:
+            raise ValueError(f"Aucune méthode de géolocalisation disponible pour {zone_data['name']}")
     
     def _execute_overpass_query(self, query: str) -> Dict:
         """
@@ -255,34 +279,215 @@ class OSMHandler:
         
         Args:
             elements: Liste des éléments OSM
-            zone_name: Nom de la zone
+            zone_name: Nom de la zone pour logging
             
         Returns:
-            List[Building]: Liste des bâtiments créés
+            List[Building]: Liste des bâtiments traités
         """
         buildings = []
         processed_count = 0
         skipped_count = 0
         
+        logger.info(f"📊 Traitement OSM: {len(elements)} éléments à traiter")
+        
         for element in elements:
             try:
-                # Vérifier que l'élément a une géométrie valide
-                if not element.get('geometry') or len(element.get('geometry', [])) < 3:
+                processed_count += 1
+                
+                # Vérification du type d'élément
+                if element.get('type') not in ['way', 'relation']:
                     skipped_count += 1
                     continue
                 
-                # Créer le bâtiment depuis les données OSM
-                building = Building.from_osm_data(element, zone_name)
+                # Extraction des tags
+                tags = element.get('tags', {})
+                
+                # Vérification tag building
+                building_tag = tags.get('building')
+                if not building_tag or building_tag in ['no', 'false']:
+                    skipped_count += 1
+                    continue
+                
+                # Extraction des coordonnées
+                geometry = element.get('geometry', [])
+                if not geometry:
+                    skipped_count += 1
+                    continue
+                
+                # Calcul du centre géométrique
+                lats = [coord['lat'] for coord in geometry if 'lat' in coord]
+                lons = [coord['lon'] for coord in geometry if 'lon' in coord]
+                
+                if not lats or not lons:
+                    skipped_count += 1
+                    continue
+                
+                center_lat = sum(lats) / len(lats)
+                center_lon = sum(lons) / len(lons)
+                
+                # Calcul de la surface approximative (polygone)
+                surface_area = self._calculate_polygon_area(geometry)
+                
+                # Détermination du type de bâtiment
+                building_type = self._normalize_building_type(building_tag, tags)
+                
+                # Estimation de la consommation de base
+                base_consumption = self._estimate_base_consumption(building_type, surface_area)
+                
+                # Création de l'objet Building
+                building = Building(
+                    osm_id=str(element.get('id', '')),
+                    latitude=center_lat,
+                    longitude=center_lon,
+                    building_type=building_type,
+                    surface_area_m2=surface_area,
+                    base_consumption_kwh=base_consumption,
+                    osm_tags=tags,
+                    zone_name=zone_name
+                )
+                
                 buildings.append(building)
-                processed_count += 1
                 
             except Exception as e:
-                logger.warning(f"⚠️ Erreur traitement élément OSM {element.get('id', 'unknown')}: {str(e)}")
                 skipped_count += 1
+                logger.warning(f"⚠️ Erreur traitement élément OSM: {str(e)}")
                 continue
         
-        logger.info(f"📊 Traitement OSM: {processed_count} créés, {skipped_count} ignorés")
+        created_count = len(buildings)
+        logger.info(f"📊 Traitement OSM: {created_count} créés, {skipped_count} ignorés")
+        
         return buildings
+    
+    def _calculate_polygon_area(self, geometry: List[Dict]) -> float:
+        """
+        Calcule l'aire d'un polygone à partir de ses coordonnées
+        
+        Args:
+            geometry: Liste des coordonnées du polygone
+            
+        Returns:
+            float: Aire en m²
+        """
+        if len(geometry) < 3:
+            return 50.0  # Surface par défaut pour point/ligne
+        
+        try:
+            # Conversion coords géographiques en mètres (approximation)
+            coords_m = []
+            for coord in geometry:
+                lat = coord.get('lat', 0)
+                lon = coord.get('lon', 0)
+                
+                # Conversion approximative à la latitude de Malaysia
+                x = lon * 111320 * math.cos(math.radians(lat))  # longitude en mètres
+                y = lat * 110540  # latitude en mètres
+                coords_m.append((x, y))
+            
+            # Formule de Shoelace pour l'aire du polygone
+            n = len(coords_m)
+            area = 0.0
+            
+            for i in range(n):
+                j = (i + 1) % n
+                area += coords_m[i][0] * coords_m[j][1]
+                area -= coords_m[j][0] * coords_m[i][1]
+            
+            area = abs(area) / 2.0
+            
+            # Validation de l'aire
+            if area < 10:  # Minimum 10m²
+                return 50.0
+            elif area > 100000:  # Maximum 100,000m²
+                return 1000.0
+            
+            return area
+            
+        except Exception:
+            return 75.0  # Surface par défaut en cas d'erreur
+    
+    def _normalize_building_type(self, building_tag: str, tags: Dict) -> str:
+        """
+        Normalise le type de bâtiment OSM vers nos catégories
+        
+        Args:
+            building_tag: Valeur du tag 'building'
+            tags: Tous les tags OSM de l'élément
+            
+        Returns:
+            str: Type de bâtiment normalisé
+        """
+        # Mapping OSM vers nos types
+        type_mapping = {
+            'residential': 'residential',
+            'house': 'residential', 
+            'apartment': 'residential',
+            'apartments': 'residential',
+            'detached': 'residential',
+            'terrace': 'residential',
+            'commercial': 'commercial',
+            'retail': 'commercial',
+            'shop': 'commercial',
+            'office': 'office',
+            'industrial': 'industrial',
+            'factory': 'industrial',
+            'warehouse': 'industrial',
+            'hospital': 'hospital',
+            'school': 'school',
+            'university': 'school',
+            'hotel': 'hotel',
+            'yes': 'residential',  # Par défaut
+            'true': 'residential'
+        }
+        
+        # Vérification du tag building principal
+        normalized = type_mapping.get(building_tag.lower(), 'residential')
+        
+        # Affinement avec d'autres tags
+        if tags.get('amenity') == 'hospital':
+            return 'hospital'
+        elif tags.get('amenity') in ['school', 'university']:
+            return 'school'
+        elif tags.get('tourism') == 'hotel':
+            return 'hotel'
+        elif tags.get('shop'):
+            return 'commercial'
+        elif tags.get('office'):
+            return 'office'
+        elif tags.get('landuse') == 'industrial':
+            return 'industrial'
+        
+        return normalized
+    
+    def _estimate_base_consumption(self, building_type: str, surface_area: float) -> float:
+        """
+        Estime la consommation électrique de base d'un bâtiment
+        
+        Args:
+            building_type: Type de bâtiment
+            surface_area: Surface en m²
+            
+        Returns:
+            float: Consommation de base en kWh/jour
+        """
+        # Coefficients de consommation par type (kWh/m²/jour)
+        consumption_coefficients = {
+            'residential': 0.15,
+            'commercial': 0.25,
+            'office': 0.30,
+            'industrial': 0.45,
+            'hospital': 0.40,
+            'school': 0.20,
+            'hotel': 0.35
+        }
+        
+        coefficient = consumption_coefficients.get(building_type, 0.15)
+        base_consumption = surface_area * coefficient
+        
+        # Limites de validation
+        min_consumption = 5.0   # 5 kWh/jour minimum
+        max_consumption = 10000.0  # 10 MWh/jour maximum
+        
+        return max(min_consumption, min(base_consumption, max_consumption))
     
     def _validate_and_clean_buildings(self, buildings: List[Building]) -> Tuple[List[Building], List[str]]:
         """
@@ -464,7 +669,7 @@ def calculate_bbox_area(bbox: List[float]) -> float:
     
     # Conversion approximative degrés -> km (à la latitude de Malaysia)
     lat_km_per_degree = 111.0
-    lon_km_per_degree = 111.0 * abs(sum([south, north]) / 2) / 90  # correction latitude
+    lon_km_per_degree = 111.0 * math.cos(math.radians((south + north) / 2))
     
     width_km = (east - west) * lon_km_per_degree
     height_km = (north - south) * lat_km_per_degree

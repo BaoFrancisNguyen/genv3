@@ -2,8 +2,7 @@
 Service de Génération - Couche métier pour la génération de données électriques
 ==============================================================================
 
-Ce service orchestre la génération complète des données électriques
-en coordonnant les différents composants et en ajoutant la logique métier.
+Ce service orchestre la génération complète des données électriques.
 """
 
 import logging
@@ -11,9 +10,8 @@ import pandas as pd
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from src.core.generator import ElectricityDataGenerator, validate_generation_parameters, estimate_generation_time
-from src.models.building import Building, validate_building_list
-from src.models.timeseries import TimeSeries, timeseries_to_dataframe, validate_timeseries_data
+from src.core.generator import ElectricityDataGenerator
+from src.models.building import Building
 
 
 # Configuration du logger
@@ -80,6 +78,7 @@ class GenerationService:
             )
             
             if not validation_result['valid']:
+                logger.error(f"❌ Validation échouée: {validation_result['errors']}")
                 return {
                     'success': False,
                     'error': 'Paramètres invalides',
@@ -87,18 +86,22 @@ class GenerationService:
                 }
             
             # Phase 2: Conversion des bâtiments OSM en objets Building
+            logger.info("🏗️ Conversion des bâtiments OSM...")
             buildings_conversion = self._convert_osm_to_buildings(buildings_osm, zone_name)
             
             if not buildings_conversion['success']:
+                logger.error(f"❌ Conversion OSM échouée: {buildings_conversion.get('error')}")
                 return buildings_conversion
             
             buildings = buildings_conversion['buildings']
             self.service_statistics['total_buildings_processed'] += len(buildings)
             
             # Phase 3: Génération des métadonnées de bâtiments
+            logger.info("📋 Génération des métadonnées...")
             buildings_df = self.generator.generate_building_metadata(buildings)
             
             # Phase 4: Génération des séries temporelles
+            logger.info("⏰ Génération des séries temporelles...")
             timeseries_df = self.generator.generate_timeseries_for_buildings(
                 buildings, start_date, end_date, frequency
             )
@@ -106,6 +109,7 @@ class GenerationService:
             self.service_statistics['total_observations_created'] += len(timeseries_df)
             
             # Phase 5: Validation et nettoyage des données générées
+            logger.info("🧹 Contrôle qualité...")
             quality_check = self._perform_quality_check(buildings_df, timeseries_df)
             
             # Phase 6: Génération du résumé statistique
@@ -140,7 +144,10 @@ class GenerationService:
             return response
             
         except Exception as e:
+            self.service_statistics['total_generations'] += 1  # Compter les échecs aussi
             logger.error(f"❌ Erreur génération dataset: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return {
                 'success': False,
                 'error': f"Erreur de génération: {str(e)}",
@@ -172,18 +179,29 @@ class GenerationService:
         # Validation des bâtiments OSM
         if not buildings_osm:
             errors.append("Aucun bâtiment OSM fourni")
+        elif len(buildings_osm) > 50000:
+            errors.append("Trop de bâtiments (max 50000)")
         elif len(buildings_osm) > 10000:
-            errors.append("Trop de bâtiments (max 10000)")
-        elif len(buildings_osm) > 5000:
             warnings.append("Grand nombre de bâtiments - génération longue")
         
         # Validation des paramètres temporels
-        params_valid, param_errors = validate_generation_parameters(
-            start_date, end_date, frequency, len(buildings_osm)
-        )
+        try:
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            
+            if start >= end:
+                errors.append("Date de fin doit être après date de début")
+            
+            if (end - start).days > 365:
+                errors.append("Période maximale: 365 jours")
+                
+        except Exception as e:
+            errors.append(f"Format de dates invalide: {str(e)}")
         
-        if not params_valid:
-            errors.extend(param_errors)
+        # Validation fréquence
+        valid_frequencies = ['15T', '30T', '1H', '3H', 'D']
+        if frequency not in valid_frequencies:
+            errors.append(f"Fréquence invalide. Supportées: {valid_frequencies}")
         
         # Validation de la cohérence des données OSM
         osm_validation = self._validate_osm_data_quality(buildings_osm)
@@ -234,16 +252,18 @@ class GenerationService:
                 quality_metrics['has_coordinates'] += 1
                 
                 # Validation coordonnées Malaysia
-                if 0.5 <= float(lat) <= 7.5 and 99.0 <= float(lon) <= 120.0:
-                    quality_metrics['has_valid_coordinates'] += 1
-                else:
-                    warnings.append(f"Bâtiment {i}: coordonnées hors Malaysia")
-            else:
-                warnings.append(f"Bâtiment {i}: coordonnées manquantes")
+                try:
+                    lat_f, lon_f = float(lat), float(lon)
+                    if 0.5 <= lat_f <= 7.5 and 99.0 <= lon_f <= 120.0:
+                        quality_metrics['has_valid_coordinates'] += 1
+                    else:
+                        warnings.append(f"Bâtiment {i}: coordonnées hors Malaysia")
+                except:
+                    warnings.append(f"Bâtiment {i}: coordonnées non numériques")
             
             # Vérification type de bâtiment
-            building_type = building_data.get('building_type') or building_data.get('type')
-            if building_type and building_type != 'yes':
+            building_type = building_data.get('building_type')
+            if building_type:
                 quality_metrics['has_building_type'] += 1
             
             # Vérification ID OSM
@@ -252,20 +272,12 @@ class GenerationService:
                 quality_metrics['has_osm_id'] += 1
         
         # Calcul du score de qualité
-        total = len(buildings_osm)
-        quality_score = (
-            (quality_metrics['has_valid_coordinates'] / total) * 40 +
-            (quality_metrics['has_building_type'] / total) * 30 +
-            (quality_metrics['has_osm_id'] / total) * 20 +
-            (quality_metrics['has_coordinates'] / total) * 10
-        )
+        total_buildings = len(buildings_osm)
+        coord_score = (quality_metrics['has_valid_coordinates'] / total_buildings) * 40
+        type_score = (quality_metrics['has_building_type'] / total_buildings) * 30
+        id_score = (quality_metrics['has_osm_id'] / total_buildings) * 30
         
-        # Détection d'erreurs critiques
-        if quality_metrics['has_coordinates'] == 0:
-            critical_errors.append("Aucun bâtiment avec coordonnées")
-        
-        if quality_metrics['has_valid_coordinates'] / total < 0.5:
-            critical_errors.append("Moins de 50% des coordonnées sont valides")
+        quality_score = coord_score + type_score + id_score
         
         return {
             'quality_score': round(quality_score, 1),
@@ -279,100 +291,73 @@ class GenerationService:
         Convertit les données OSM en objets Building
         
         Args:
-            buildings_osm: Données OSM brutes
+            buildings_osm: Données OSM des bâtiments
             zone_name: Nom de la zone
             
         Returns:
-            Dict: Résultats de conversion
+            Dict: Résultat de conversion
         """
         try:
             buildings = []
             conversion_stats = {
-                'attempted': len(buildings_osm),
-                'successful': 0,
-                'failed': 0,
-                'warnings': []
+                'processed': 0,
+                'converted': 0,
+                'skipped': 0,
+                'errors': []
             }
             
             for i, osm_data in enumerate(buildings_osm):
+                conversion_stats['processed'] += 1
+                
                 try:
-                    # Normalisation des données OSM
-                    normalized_data = self._normalize_osm_data(osm_data)
+                    # Extraction des coordonnées
+                    lat = osm_data.get('latitude') or osm_data.get('lat')
+                    lon = osm_data.get('longitude') or osm_data.get('lon')
                     
-                    # Création du bâtiment
-                    building = Building.from_osm_data(normalized_data, zone_name)
+                    if lat is None or lon is None:
+                        conversion_stats['skipped'] += 1
+                        continue
+                    
+                    # Création de l'objet Building
+                    building = Building(
+                        osm_id=str(osm_data.get('osm_id', osm_data.get('id', f'gen_{i}'))),
+                        latitude=float(lat),
+                        longitude=float(lon),
+                        building_type=osm_data.get('building_type', 'residential'),
+                        surface_area_m2=osm_data.get('surface_area_m2', 100.0),
+                        base_consumption_kwh=osm_data.get('base_consumption_kwh', 15.0),
+                        zone_name=zone_name,
+                        osm_tags=osm_data.get('osm_tags', {})
+                    )
+                    
                     buildings.append(building)
-                    conversion_stats['successful'] += 1
+                    conversion_stats['converted'] += 1
                     
                 except Exception as e:
-                    conversion_stats['failed'] += 1
-                    conversion_stats['warnings'].append(
-                        f"Bâtiment {i}: conversion échouée ({str(e)})"
-                    )
-                    logger.warning(f"⚠️ Conversion échouée bâtiment {i}: {str(e)}")
+                    conversion_stats['skipped'] += 1
+                    conversion_stats['errors'].append(f"Bâtiment {i}: {str(e)}")
             
-            # Validation des bâtiments créés
-            valid_buildings, validation_errors = validate_building_list(buildings)
-            
-            if validation_errors:
-                conversion_stats['warnings'].extend(validation_errors)
-            
-            logger.info(f"🏗️ Conversion OSM: {len(valid_buildings)}/{len(buildings_osm)} réussies")
+            success_rate = (conversion_stats['converted'] / conversion_stats['processed']) * 100
             
             return {
-                'success': True,
-                'buildings': valid_buildings,
-                'conversion_info': conversion_stats
+                'success': conversion_stats['converted'] > 0,
+                'buildings': buildings,
+                'conversion_info': {
+                    'success_rate_percent': round(success_rate, 1),
+                    'statistics': conversion_stats
+                }
             }
             
         except Exception as e:
-            logger.error(f"❌ Erreur conversion OSM: {str(e)}")
             return {
                 'success': False,
-                'error': f"Erreur conversion: {str(e)}",
+                'error': f"Erreur conversion OSM: {str(e)}",
                 'buildings': []
             }
     
-    def _normalize_osm_data(self, osm_data: Dict) -> Dict:
-        """
-        Normalise les données OSM pour la création de Building
-        
-        Args:
-            osm_data: Données OSM brutes
-            
-        Returns:
-            Dict: Données normalisées
-        """
-        # Mapping des champs alternatifs
-        normalized = {
-            'id': osm_data.get('osm_id') or osm_data.get('id'),
-            'lat': osm_data.get('latitude') or osm_data.get('lat'),
-            'lon': osm_data.get('longitude') or osm_data.get('lon'),
-            'tags': osm_data.get('tags', {}),
-            'geometry': osm_data.get('geometry', [])
-        }
-        
-        # Normalisation du type de bâtiment
-        building_type = (
-            osm_data.get('building_type') or 
-            osm_data.get('type') or 
-            normalized['tags'].get('building', 'residential')
-        )
-        
-        if building_type == 'yes':
-            building_type = 'residential'
-        
-        normalized['tags']['building'] = building_type
-        
-        # Normalisation de la géométrie
-        if not normalized['geometry'] and normalized['lat'] and normalized['lon']:
-            normalized['geometry'] = [{'lat': normalized['lat'], 'lon': normalized['lon']}]
-        
-        return normalized
-    
     def _perform_quality_check(self, buildings_df: pd.DataFrame, timeseries_df: pd.DataFrame) -> Dict:
         """
-        Effectue un contrôle qualité des données générées
+        Effectue un contrôle qualité sur les données générées
         
         Args:
             buildings_df: DataFrame des bâtiments
@@ -382,58 +367,66 @@ class GenerationService:
             Dict: Métriques de qualité
         """
         quality_metrics = {
+            'overall_score': 100.0,
             'buildings_quality': {},
             'timeseries_quality': {},
-            'overall_score': 0
+            'issues': []
         }
         
-        # Qualité des bâtiments
+        # Contrôle qualité des bâtiments
         if not buildings_df.empty:
-            buildings_quality = {
-                'total_buildings': len(buildings_df),
-                'complete_coordinates': (buildings_df[['latitude', 'longitude']].notna().all(axis=1)).sum(),
-                'valid_types': (buildings_df['building_type'] != 'unknown').sum(),
-                'positive_consumption': (buildings_df['base_consumption_kwh'] > 0).sum()
-            }
+            # Vérification des doublons
+            duplicates = buildings_df.duplicated(subset=['latitude', 'longitude']).sum()
+            if duplicates > 0:
+                quality_metrics['overall_score'] -= 5
+                quality_metrics['issues'].append(f"{duplicates} bâtiments doublons")
             
-            buildings_score = (
-                (buildings_quality['complete_coordinates'] / buildings_quality['total_buildings']) * 40 +
-                (buildings_quality['valid_types'] / buildings_quality['total_buildings']) * 35 +
-                (buildings_quality['positive_consumption'] / buildings_quality['total_buildings']) * 25
-            )
+            # Vérification des coordonnées
+            invalid_coords = ((buildings_df['latitude'] < 0.5) | 
+                            (buildings_df['latitude'] > 7.5) |
+                            (buildings_df['longitude'] < 99.0) | 
+                            (buildings_df['longitude'] > 120.0)).sum()
+            
+            if invalid_coords > 0:
+                quality_metrics['overall_score'] -= 10
+                quality_metrics['issues'].append(f"{invalid_coords} coordonnées invalides")
             
             quality_metrics['buildings_quality'] = {
-                **buildings_quality,
-                'score': round(buildings_score, 1)
+                'total_buildings': len(buildings_df),
+                'duplicates': duplicates,
+                'invalid_coordinates': invalid_coords
             }
         
-        # Qualité des séries temporelles
+        # Contrôle qualité des séries temporelles
         if not timeseries_df.empty:
-            timeseries_quality = {
-                'total_observations': len(timeseries_df),
-                'positive_consumption': (timeseries_df['consumption_kwh'] > 0).sum(),
-                'realistic_temperature': ((timeseries_df['temperature_c'] >= 20) & 
-                                        (timeseries_df['temperature_c'] <= 45)).sum(),
-                'valid_humidity': ((timeseries_df['humidity'] >= 0.3) & 
-                                 (timeseries_df['humidity'] <= 1.0)).sum()
-            }
+            # Vérification des valeurs négatives
+            negative_values = (timeseries_df['consumption_kwh'] < 0).sum()
+            if negative_values > 0:
+                quality_metrics['overall_score'] -= 15
+                quality_metrics['issues'].append(f"{negative_values} valeurs négatives")
             
-            timeseries_score = (
-                (timeseries_quality['positive_consumption'] / timeseries_quality['total_observations']) * 50 +
-                (timeseries_quality['realistic_temperature'] / timeseries_quality['total_observations']) * 25 +
-                (timeseries_quality['valid_humidity'] / timeseries_quality['total_observations']) * 25
-            )
+            # Vérification des valeurs nulles
+            null_values = timeseries_df['consumption_kwh'].isnull().sum()
+            if null_values > 0:
+                quality_metrics['overall_score'] -= 20
+                quality_metrics['issues'].append(f"{null_values} valeurs nulles")
+            
+            # Vérification de la cohérence temporelle
+            if 'timestamp' in timeseries_df.columns:
+                time_gaps = timeseries_df['timestamp'].duplicated().sum()
+                if time_gaps > 0:
+                    quality_metrics['overall_score'] -= 5
+                    quality_metrics['issues'].append(f"{time_gaps} doublons temporels")
             
             quality_metrics['timeseries_quality'] = {
-                **timeseries_quality,
-                'score': round(timeseries_score, 1)
+                'total_observations': len(timeseries_df),
+                'negative_values': negative_values,
+                'null_values': null_values,
+                'mean_consumption': timeseries_df['consumption_kwh'].mean(),
+                'std_consumption': timeseries_df['consumption_kwh'].std()
             }
         
-        # Score global
-        building_score = quality_metrics['buildings_quality'].get('score', 0)
-        timeseries_score = quality_metrics['timeseries_quality'].get('score', 0)
-        quality_metrics['overall_score'] = round((building_score + timeseries_score) / 2, 1)
-        
+        quality_metrics['overall_score'] = max(0.0, quality_metrics['overall_score'])
         return quality_metrics
     
     def estimate_generation_resources(
@@ -444,7 +437,7 @@ class GenerationService:
         frequency: str
     ) -> Dict:
         """
-        Estime les ressources nécessaires pour une génération
+        Estime les ressources nécessaires pour la génération
         
         Args:
             num_buildings: Nombre de bâtiments
@@ -453,54 +446,63 @@ class GenerationService:
             frequency: Fréquence
             
         Returns:
-            Dict: Estimations détaillées
+            Dict: Estimation des ressources
         """
         try:
-            # Estimation de base via le générateur
-            base_estimation = estimate_generation_time(
-                num_buildings, start_date, end_date, frequency
-            )
+            # Calcul du nombre d'observations
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            date_range = pd.date_range(start=start, end=end, freq=frequency)
             
-            # Enrichissement avec logique métier
-            enhanced_estimation = base_estimation.copy()
+            total_observations = num_buildings * len(date_range)
             
-            # Facteurs d'ajustement selon la complexité
-            if num_buildings > 1000:
-                enhanced_estimation['memory_usage_mb'] = num_buildings * 0.5
-                enhanced_estimation['recommended_ram_gb'] = max(4, num_buildings / 2000)
+            # Estimation du temps (approximatif)
+            observations_per_second = 10000  # Calibré selon les performances
+            estimated_time_seconds = total_observations / observations_per_second
+            
+            # Estimation de la taille mémoire (approximatif)
+            bytes_per_observation = 100  # Estimation
+            estimated_memory_mb = (total_observations * bytes_per_observation) / (1024 * 1024)
+            
+            # Niveau de complexité
+            if total_observations < 50000:
+                complexity = 'simple'
+                recommendation = 'Génération rapide'
+            elif total_observations < 500000:
+                complexity = 'modéré'
+                recommendation = 'Génération standard'
+            elif total_observations < 2000000:
+                complexity = 'complexe'
+                recommendation = 'Génération longue - soyez patient'
             else:
-                enhanced_estimation['memory_usage_mb'] = 50
-                enhanced_estimation['recommended_ram_gb'] = 2
-            
-            # Recommandations de performance
-            recommendations = []
-            
-            if enhanced_estimation.get('total_data_points', 0) > 100000:
-                recommendations.append("Génération en plusieurs étapes recommandée")
-            
-            if enhanced_estimation.get('estimated_duration_seconds', 0) > 300:
-                recommendations.append("Prévoir 5+ minutes - ne pas fermer le navigateur")
-            
-            enhanced_estimation['performance_recommendations'] = recommendations
+                complexity = 'très_complexe'
+                recommendation = 'Génération très longue - considérer la réduction'
             
             return {
-                'success': True,
-                'estimation': enhanced_estimation
+                'num_buildings': num_buildings,
+                'date_range_days': (end - start).days,
+                'frequency': frequency,
+                'total_observations': total_observations,
+                'estimated_time_seconds': round(estimated_time_seconds, 1),
+                'estimated_time_minutes': round(estimated_time_seconds / 60, 1),
+                'estimated_memory_mb': round(estimated_memory_mb, 1),
+                'complexity_level': complexity,
+                'recommendation': recommendation
             }
             
         except Exception as e:
-            logger.error(f"❌ Erreur estimation: {str(e)}")
             return {
-                'success': False,
-                'error': str(e)
+                'error': f"Erreur estimation: {str(e)}",
+                'num_buildings': num_buildings,
+                'complexity_level': 'unknown'
             }
     
     def get_service_status(self) -> Dict:
         """
-        Retourne l'état du service de génération
+        Retourne le statut du service de génération
         
         Returns:
-            Dict: État détaillé du service
+            Dict: Statut et statistiques du service
         """
         uptime = datetime.now() - self.service_statistics['service_start_time']
         
@@ -565,55 +567,6 @@ def calculate_generation_complexity(
         return 'complexe'
     else:
         return 'très_complexe'
-
-
-def optimize_generation_parameters(
-    num_buildings: int,
-    start_date: str,
-    end_date: str,
-    frequency: str
-) -> Dict:
-    """
-    Optimise les paramètres de génération selon les contraintes
-    
-    Args:
-        num_buildings: Nombre de bâtiments
-        start_date: Date de début
-        end_date: Date de fin
-        frequency: Fréquence
-        
-    Returns:
-        Dict: Paramètres optimisés et suggestions
-    """
-    suggestions = {
-        'optimized_frequency': frequency,
-        'batch_size': num_buildings,
-        'recommendations': []
-    }
-    
-    # Calcul de la complexité
-    date_range = pd.to_datetime(end_date) - pd.to_datetime(start_date)
-    days = date_range.days
-    
-    freq_minutes = {'15T': 15, '30T': 30, '1H': 60, '3H': 180, 'D': 1440}.get(frequency, 30)
-    complexity = calculate_generation_complexity(num_buildings, days, freq_minutes)
-    
-    # Optimisations selon la complexité
-    if complexity == 'très_complexe':
-        if freq_minutes < 60:
-            suggestions['optimized_frequency'] = '1H'
-            suggestions['recommendations'].append("Fréquence réduite pour améliorer les performances")
-        
-        if num_buildings > 5000:
-            suggestions['batch_size'] = 2500
-            suggestions['recommendations'].append("Traitement par lots recommandé")
-    
-    elif complexity == 'complexe':
-        if num_buildings > 3000:
-            suggestions['batch_size'] = 1500
-            suggestions['recommendations'].append("Traitement en lots pour optimiser")
-    
-    return suggestions
 
 
 # ==============================================================================

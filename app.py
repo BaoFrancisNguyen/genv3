@@ -1,22 +1,23 @@
 """
-Application Flask principale refactorisée - Générateur électrique Malaysia
-========================================================================
+Application Flask principale - Générateur électrique Malaysia
+===========================================================
 
-Application épurée avec architecture modulaire et code propre.
-Focus sur les fonctionnalités essentielles sans fioritures.
+Application complète avec gestion d'erreurs robuste.
 """
 
 from flask import Flask, request, jsonify, render_template, send_file
 import logging
-from datetime import datetime
-import os
 import traceback
+import os
+import pandas as pd
+import numpy as np
+from datetime import datetime
 from typing import Dict, List
 
-# Imports des modules refactorisés
+# Imports des modules
 from config import APP_CONFIG, LOGGING_CONFIG, initialize_config
 from src.core.osm_handler import OSMHandler
-from src.core.generator import ElectricityDataGenerator, validate_generation_parameters
+from src.core.generator import ElectricityDataGenerator
 from src.core.data_exporter import DataExporter
 from src.services.osm_service import OSMService
 from src.services.generation_service import GenerationService
@@ -27,38 +28,25 @@ from src.services.export_service import ExportService
 # CONFIGURATION DE L'APPLICATION
 # ==============================================================================
 
-def create_app():
-    """
-    Factory pour créer l'application Flask
-    
-    Returns:
-        Flask: Instance de l'application configurée
-    """
-    app = Flask(__name__)
-    app.config.from_object(APP_CONFIG)
-    
-    # Initialisation des composants
-    initialize_config()
-    setup_logging()
-    
-    return app
-
-
 def setup_logging():
-    """Configure le système de logging de l'application"""
+    """Configure le système de logging"""
     logging.basicConfig(
         level=getattr(logging, LOGGING_CONFIG.LOG_LEVEL),
         format=LOGGING_CONFIG.LOG_FORMAT,
         datefmt=LOGGING_CONFIG.DATE_FORMAT
     )
-    
-    # Logger spécifique pour l'application
-    app_logger = logging.getLogger('malaysia_generator')
-    app_logger.info("✅ Application initialisée")
+
+def create_app():
+    """Factory pour créer l'application Flask"""
+    app = Flask(__name__)
+    app.config.from_object(APP_CONFIG)
+    initialize_config()
+    setup_logging()
+    return app
 
 
 # ==============================================================================
-# INITIALISATION DES SERVICES
+# INITIALISATION DE L'APPLICATION
 # ==============================================================================
 
 # Création de l'application
@@ -79,18 +67,46 @@ logger = logging.getLogger('malaysia_generator')
 
 
 # ==============================================================================
+# FONCTIONS UTILITAIRES
+# ==============================================================================
+
+def validate_generation_parameters_simple(start_date: str, end_date: str, frequency: str, num_buildings: int):
+    """Validation simplifiée des paramètres"""
+    errors = []
+    
+    # Validation dates
+    try:
+        start = pd.to_datetime(start_date)
+        end = pd.to_datetime(end_date)
+        if start >= end:
+            errors.append("Date de fin doit être après date de début")
+        if (end - start).days > 365:
+            errors.append("Période maximale: 365 jours")
+    except Exception as e:
+        errors.append(f"Format de dates invalide: {str(e)}")
+    
+    # Validation fréquence
+    valid_frequencies = ['15T', '30T', '1H', '3H', 'D']
+    if frequency not in valid_frequencies:
+        errors.append(f"Fréquence invalide. Supportées: {valid_frequencies}")
+    
+    # Validation nombre de bâtiments
+    if not (1 <= num_buildings <= 50000):
+        errors.append(f"Nombre de bâtiments doit être entre 1 et 50000")
+    
+    return len(errors) == 0, errors
+
+
+# ==============================================================================
 # ROUTES PRINCIPALES
 # ==============================================================================
 
 @app.route('/')
 def index():
-    """Page d'accueil de l'application"""
+    """Page d'accueil"""
     try:
-        # Récupération des zones disponibles pour le formulaire
         available_zones = osm_service.get_available_zones()
-        
         return render_template('index.html', zones=available_zones)
-        
     except Exception as e:
         logger.error(f"❌ Erreur page d'accueil: {str(e)}")
         return render_template('index.html', zones=[], error="Erreur de chargement")
@@ -98,78 +114,45 @@ def index():
 
 @app.route('/api/zones', methods=['GET'])
 def api_get_zones():
-    """
-    API pour récupérer la liste des zones disponibles
-    
-    Returns:
-        JSON: Liste des zones avec métadonnées
-    """
+    """API pour récupérer les zones disponibles"""
     try:
         zones = osm_service.get_available_zones()
-        
         return jsonify({
             'success': True,
             'zones': zones,
             'total_count': len(zones)
         })
-        
     except Exception as e:
         logger.error(f"❌ Erreur API zones: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/zone-estimation/<zone_name>', methods=['GET'])
 def api_zone_estimation(zone_name: str):
-    """
-    API pour obtenir l'estimation de complexité d'une zone
-    
-    Args:
-        zone_name: Nom de la zone à estimer
-        
-    Returns:
-        JSON: Estimation de temps, taille et complexité
-    """
+    """API pour obtenir l'estimation d'une zone"""
     try:
         estimation = osm_service.get_zone_estimation(zone_name)
-        
         return jsonify({
             'success': True,
             'estimation': estimation
         })
-        
     except Exception as e:
         logger.error(f"❌ Erreur estimation zone {zone_name}: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/osm-buildings/<zone_name>', methods=['POST'])
 def api_load_osm_buildings(zone_name: str):
-    """
-    API pour charger les bâtiments OSM d'une zone complète
-    
-    Args:
-        zone_name: Nom de la zone
-        
-    Returns:
-        JSON: Bâtiments OSM chargés avec métadonnées
-    """
+    """API pour charger les bâtiments OSM d'une zone"""
     try:
         logger.info(f"🔄 Chargement OSM pour zone: {zone_name}")
         
-        # Chargement des bâtiments OSM
         osm_result = osm_service.load_complete_zone_buildings(zone_name)
         
         if not osm_result['success']:
             return jsonify(osm_result), 400
         
         logger.info(f"✅ {len(osm_result['buildings'])} bâtiments OSM chargés")
-        
         return jsonify(osm_result)
         
     except Exception as e:
@@ -181,6 +164,238 @@ def api_load_osm_buildings(zone_name: str):
         }), 500
 
 
+@app.route('/api/estimate-generation', methods=['POST'])
+def api_estimate_generation():
+    """API pour estimer les ressources de génération"""
+    try:
+        data = request.get_json()
+        logger.info(f"📊 Demande d'estimation: {data}")
+        
+        # Extraction des paramètres
+        num_buildings = data.get('num_buildings', 0)
+        start_date = data.get('start_date', '2024-01-01')
+        end_date = data.get('end_date', '2024-01-31')
+        frequency = data.get('frequency', '30T')
+        
+        logger.info(f"📊 Paramètres estimation: {num_buildings} bâtiments, {start_date} → {end_date}, {frequency}")
+        
+        # Validation des paramètres
+        if not isinstance(num_buildings, int) or num_buildings <= 0:
+            return jsonify({
+                'success': False,
+                'error': 'Nombre de bâtiments invalide'
+            }), 400
+        
+        # Calcul des estimations
+        try:
+            # Calcul du nombre d'observations
+            start = pd.to_datetime(start_date)
+            end = pd.to_datetime(end_date)
+            days = (end - start).days + 1  # Inclure le dernier jour
+            
+            # Points de données par jour selon la fréquence
+            freq_points_per_day = {
+                'D': 1,      # Quotidien
+                '3H': 8,     # Toutes les 3 heures
+                '1H': 24,    # Toutes les heures
+                '30T': 48,   # Toutes les 30 minutes
+                '15T': 96    # Toutes les 15 minutes
+            }
+            
+            points_per_day = freq_points_per_day.get(frequency, 48)
+            total_observations = num_buildings * days * points_per_day
+            
+            # Estimation du temps de génération
+            # Base: ~50,000 observations par seconde
+            observations_per_second = 50000
+            estimated_time_seconds = max(1, total_observations / observations_per_second)
+            estimated_time_minutes = estimated_time_seconds / 60
+            
+            # Estimation de la taille des données
+            # Base: ~200 bytes par observation (avec métadonnées)
+            bytes_per_observation = 200
+            estimated_size_bytes = total_observations * bytes_per_observation
+            estimated_size_mb = estimated_size_bytes / (1024 * 1024)
+            estimated_size_gb = estimated_size_mb / 1024
+            
+            # Estimation de l'utilisation mémoire
+            # Factor 3x pour le traitement en mémoire
+            memory_usage_mb = estimated_size_mb * 3
+            
+            # Détermination du niveau de complexité
+            if total_observations < 100000:
+                complexity = 'simple'
+                recommendation = 'Génération rapide (< 30 secondes)'
+                warning = None
+            elif total_observations < 1000000:
+                complexity = 'modéré'
+                recommendation = 'Génération standard (1-5 minutes)'
+                warning = None
+            elif total_observations < 10000000:
+                complexity = 'complexe'
+                recommendation = 'Génération longue (5-30 minutes)'
+                warning = 'Assurez-vous d\'avoir suffisamment de mémoire RAM'
+            elif total_observations < 50000000:
+                complexity = 'très_complexe'
+                recommendation = 'Génération très longue (30 minutes - 2 heures)'
+                warning = 'Génération très longue - considérez réduire la période ou la fréquence'
+            else:
+                complexity = 'extrême'
+                recommendation = 'Génération extrêmement longue (> 2 heures)'
+                warning = 'ATTENTION: Génération très longue - fortement recommandé de réduire les paramètres'
+            
+            # Construction de la réponse
+            estimation = {
+                'input_parameters': {
+                    'num_buildings': num_buildings,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'frequency': frequency,
+                    'period_days': days
+                },
+                'calculations': {
+                    'points_per_building_per_day': points_per_day,
+                    'total_observations': total_observations,
+                    'observations_formatted': f"{total_observations:,}"
+                },
+                'time_estimation': {
+                    'estimated_seconds': round(estimated_time_seconds, 1),
+                    'estimated_minutes': round(estimated_time_minutes, 1),
+                    'estimated_hours': round(estimated_time_minutes / 60, 1) if estimated_time_minutes > 60 else 0,
+                    'human_readable': _format_duration(estimated_time_seconds)
+                },
+                'size_estimation': {
+                    'estimated_bytes': estimated_size_bytes,
+                    'estimated_mb': round(estimated_size_mb, 1),
+                    'estimated_gb': round(estimated_size_gb, 2) if estimated_size_gb > 0.1 else 0,
+                    'memory_usage_mb': round(memory_usage_mb, 1),
+                    'human_readable': _format_size(estimated_size_bytes)
+                },
+                'complexity': {
+                    'level': complexity,
+                    'recommendation': recommendation,
+                    'warning': warning
+                },
+                'feasibility': {
+                    'is_feasible': total_observations <= 50000000,
+                    'risk_level': _assess_risk_level(total_observations, memory_usage_mb),
+                    'suggestions': _get_optimization_suggestions(num_buildings, days, frequency, total_observations)
+                }
+            }
+            
+            logger.info(f"✅ Estimation calculée: {total_observations:,} observations, {estimated_time_minutes:.1f} min")
+            
+            return jsonify({
+                'success': True,
+                'estimation': estimation
+            })
+            
+        except Exception as calc_error:
+            logger.error(f"❌ Erreur calcul estimation: {str(calc_error)}")
+            return jsonify({
+                'success': False,
+                'error': f'Erreur de calcul: {str(calc_error)}'
+            }), 500
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur estimation génération: {str(e)}")
+        return jsonify({
+            'success': False, 
+            'error': str(e)
+        }), 500
+
+
+def _format_duration(seconds: float) -> str:
+    """Formate une durée en secondes en texte lisible"""
+    if seconds < 60:
+        return f"{int(seconds)} secondes"
+    elif seconds < 3600:
+        minutes = int(seconds / 60)
+        return f"{minutes} minute{'s' if minutes > 1 else ''}"
+    else:
+        hours = int(seconds / 3600)
+        minutes = int((seconds % 3600) / 60)
+        if minutes > 0:
+            return f"{hours}h{minutes:02d}min"
+        else:
+            return f"{hours} heure{'s' if hours > 1 else ''}"
+
+
+def _format_size(bytes_size: int) -> str:
+    """Formate une taille en bytes en texte lisible"""
+    if bytes_size < 1024:
+        return f"{bytes_size} bytes"
+    elif bytes_size < 1024 * 1024:
+        kb = bytes_size / 1024
+        return f"{kb:.1f} KB"
+    elif bytes_size < 1024 * 1024 * 1024:
+        mb = bytes_size / (1024 * 1024)
+        return f"{mb:.1f} MB"
+    else:
+        gb = bytes_size / (1024 * 1024 * 1024)
+        return f"{gb:.2f} GB"
+
+
+def _assess_risk_level(total_observations: int, memory_mb: float) -> str:
+    """Évalue le niveau de risque de la génération"""
+    if total_observations > 30000000 or memory_mb > 4000:
+        return 'élevé'
+    elif total_observations > 10000000 or memory_mb > 2000:
+        return 'moyen'
+    elif total_observations > 1000000 or memory_mb > 500:
+        return 'faible'
+    else:
+        return 'très_faible'
+
+
+def _get_optimization_suggestions(num_buildings: int, days: int, frequency: str, total_obs: int) -> List[str]:
+    """Génère des suggestions d'optimisation"""
+    suggestions = []
+    
+    if total_obs > 20000000:
+        if frequency in ['15T', '30T']:
+            suggestions.append("Utilisez une fréquence plus faible (1H ou D) pour réduire le volume")
+        
+        if days > 31:
+            suggestions.append("Réduisez la période à 1 mois maximum")
+        
+        if num_buildings > 100000:
+            suggestions.append("Divisez la génération par zones plus petites")
+    
+    elif total_obs > 5000000:
+        if frequency == '15T':
+            suggestions.append("Considérez utiliser 30T ou 1H pour de meilleures performances")
+        
+        if days > 90:
+            suggestions.append("Période longue détectée - considérez diviser en plusieurs générations")
+    
+    if not suggestions:
+        suggestions.append("Paramètres optimaux pour la génération")
+    
+    return suggestions
+
+def convert_numpy_types(obj):
+    """Convertit les types numpy/pandas en types Python natifs pour JSON"""
+    if isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, (np.integer, np.int64, np.int32)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float64, np.float32)):
+        return float(obj)
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, pd.Timestamp):
+        return obj.isoformat()
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj
+
+
 @app.route('/api/generate', methods=['POST'])
 def api_generate_data():
     """
@@ -190,9 +405,12 @@ def api_generate_data():
         JSON: Données générées et statistiques
     """
     try:
-        # Récupération des paramètres de la requête
+        logger.info("🚀 Début API generate")
+        
+        # Récupération des paramètres
         data = request.get_json()
         if not data:
+            logger.error("❌ Aucune donnée JSON reçue")
             return jsonify({
                 'success': False,
                 'error': 'Données JSON requises'
@@ -203,36 +421,43 @@ def api_generate_data():
         buildings_osm = data.get('buildings_osm', [])
         start_date = data.get('start_date', '2024-01-01')
         end_date = data.get('end_date', '2024-01-31')
-        frequency = data.get('freq', '30T')
+        frequency = data.get('frequency', data.get('freq', '30T'))
         
         logger.info(f"🔄 Génération demandée - Zone: {zone_name}, Bâtiments: {len(buildings_osm)}")
+        logger.info(f"📅 Paramètres: {start_date} → {end_date}, fréquence: {frequency}")
         
-        # Validation des paramètres
+        # Validation des paramètres de base
         if not zone_name:
+            logger.error("❌ Nom de zone manquant")
             return jsonify({
                 'success': False,
                 'error': 'Nom de zone requis'
             }), 400
         
-        if not buildings_osm:
+        if not buildings_osm or not isinstance(buildings_osm, list):
+            logger.error("❌ Bâtiments OSM invalides")
             return jsonify({
                 'success': False,
-                'error': 'Aucun bâtiment OSM fourni'
+                'error': 'Liste de bâtiments OSM requise'
             }), 400
         
         # Validation des paramètres de génération
-        params_valid, param_errors = validate_generation_parameters(
+        params_valid, param_errors = validate_generation_parameters_simple(
             start_date, end_date, frequency, len(buildings_osm)
         )
         
         if not params_valid:
+            logger.warning(f"⚠️ Paramètres invalides: {param_errors}")
             return jsonify({
                 'success': False,
                 'error': 'Paramètres invalides',
                 'details': param_errors
             }), 400
         
+        logger.info("✅ Validation des paramètres réussie")
+        
         # Génération via le service
+        logger.info("🚀 Début de la génération...")
         generation_result = generation_service.generate_complete_dataset(
             zone_name=zone_name,
             buildings_osm=buildings_osm,
@@ -241,29 +466,35 @@ def api_generate_data():
             frequency=frequency
         )
         
-        logger.info(f"✅ Génération terminée: {generation_result['statistics']['total_observations']} observations")
-        
-        return jsonify(generation_result)
+        if generation_result.get('success'):
+            total_obs = generation_result.get('statistics', {}).get('total_observations', 0)
+            logger.info(f"✅ Génération terminée: {total_obs} observations")
+            
+            # CORRECTION: Convertir les types numpy/pandas avant la sérialisation JSON
+            cleaned_result = convert_numpy_types(generation_result)
+            
+            return jsonify(cleaned_result)
+        else:
+            error_msg = generation_result.get('error', 'Erreur inconnue')
+            logger.error(f"❌ Échec génération: {error_msg}")
+            
+            # Nettoyer aussi les erreurs
+            cleaned_result = convert_numpy_types(generation_result)
+            return jsonify(cleaned_result), 500
         
     except Exception as e:
         logger.error(f"❌ Erreur génération: {str(e)}")
         logger.error(traceback.format_exc())
         return jsonify({
             'success': False,
-            'error': str(e)
+            'error': f"Erreur serveur: {str(e)}"
         }), 500
 
 
 @app.route('/api/export', methods=['POST'])
 def api_export_data():
-    """
-    API pour exporter les données générées
-    
-    Returns:
-        JSON: Résultats d'export avec chemins des fichiers
-    """
+    """API pour exporter les données générées"""
     try:
-        # Récupération des données à exporter
         data = request.get_json()
         if not data:
             return jsonify({
@@ -286,29 +517,17 @@ def api_export_data():
             filename_prefix=filename_prefix
         )
         
-        logger.info(f"✅ Export terminé: {export_result['total_size_mb']:.2f} MB")
-        
+        logger.info(f"✅ Export terminé: {export_result.get('total_size_mb', 0):.2f} MB")
         return jsonify(export_result)
         
     except Exception as e:
         logger.error(f"❌ Erreur export: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/download/<filename>')
 def api_download_file(filename: str):
-    """
-    API pour télécharger un fichier exporté
-    
-    Args:
-        filename: Nom du fichier à télécharger
-        
-    Returns:
-        File: Fichier à télécharger
-    """
+    """API pour télécharger un fichier exporté"""
     try:
         # Sécurisation du nom de fichier
         if '..' in filename or '/' in filename:
@@ -334,83 +553,29 @@ def api_download_file(filename: str):
         )
         
     except Exception as e:
-        logger.error(f"❌ Erreur téléchargement {filename}: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        logger.error(f"❌ Erreur téléchargement: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ==============================================================================
-# ROUTES D'ÉTAT ET DIAGNOSTICS
+# ROUTES DE STATUS ET MONITORING
 # ==============================================================================
 
 @app.route('/api/status')
 def api_status():
-    """
-    API pour vérifier l'état de l'application
-    
-    Returns:
-        JSON: État des services et statistiques
-    """
+    """API pour le statut de l'application"""
     try:
-        # Vérification des services
-        osm_status = osm_service.get_service_status()
-        generation_status = generation_service.get_service_status()
-        export_status = export_service.get_service_status()
-        
-        return jsonify({
-            'success': True,
-            'application': {
-                'name': 'Malaysia Electricity Data Generator',
-                'version': '2.0.0',
-                'status': 'active',
-                'uptime_info': datetime.now().isoformat()
-            },
-            'services': {
-                'osm_service': osm_status,
-                'generation_service': generation_status,
-                'export_service': export_status
-            },
-            'configuration': {
-                'exports_directory': APP_CONFIG.EXPORTS_DIR,
-                'supported_formats': ['csv', 'parquet', 'xlsx', 'json'],
-                'max_buildings': 10000,
-                'supported_frequencies': ['15T', '30T', '1H', '3H', 'D']
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur statut: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-@app.route('/api/health')
-def api_health():
-    """
-    API de health check pour monitoring
-    
-    Returns:
-        JSON: État de santé minimal
-    """
-    try:
-        # Tests de base
-        osm_healthy = osm_service.test_connection()
-        exports_writable = os.access(APP_CONFIG.EXPORTS_DIR, os.W_OK)
-        
-        healthy = osm_healthy and exports_writable
-        
-        return jsonify({
-            'healthy': healthy,
+        status = {
+            'healthy': True,
             'timestamp': datetime.now().isoformat(),
-            'checks': {
-                'osm_connection': osm_healthy,
-                'exports_writable': exports_writable
+            'services': {
+                'osm': osm_service.test_connection(),
+                'generation': True,
+                'export': True
             }
-        }), 200 if healthy else 503
+        }
+        
+        return jsonify(status), 200 if status['healthy'] else 503
         
     except Exception as e:
         logger.error(f"❌ Erreur health check: {str(e)}")
@@ -422,21 +587,14 @@ def api_health():
 
 @app.route('/api/statistics')
 def api_statistics():
-    """
-    API pour les statistiques globales de l'application
-    
-    Returns:
-        JSON: Statistiques d'usage et performance
-    """
+    """API pour les statistiques globales"""
     try:
         stats = {
             'osm_statistics': osm_handler.get_statistics(),
             'generation_statistics': generation_service.get_statistics(),
-            'export_statistics': data_exporter.get_export_statistics(),
             'application_statistics': {
                 'total_api_calls': getattr(app, '_api_calls_count', 0),
-                'available_zones': len(osm_service.get_available_zones()),
-                'exports_directory_size_mb': _get_directory_size_mb(APP_CONFIG.EXPORTS_DIR)
+                'available_zones': len(osm_service.get_available_zones())
             }
         }
         
@@ -447,80 +605,7 @@ def api_statistics():
         
     except Exception as e:
         logger.error(f"❌ Erreur statistiques: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
-
-
-# ==============================================================================
-# ROUTES UTILITAIRES
-# ==============================================================================
-
-@app.route('/api/validate-parameters', methods=['POST'])
-def api_validate_parameters():
-    """
-    API pour valider les paramètres de génération
-    
-    Returns:
-        JSON: Résultats de validation
-    """
-    try:
-        data = request.get_json()
-        
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
-        frequency = data.get('frequency')
-        num_buildings = data.get('num_buildings', 0)
-        
-        is_valid, errors = validate_generation_parameters(
-            start_date, end_date, frequency, num_buildings
-        )
-        
-        return jsonify({
-            'valid': is_valid,
-            'errors': errors
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur validation paramètres: {str(e)}")
-        return jsonify({
-            'valid': False,
-            'errors': [str(e)]
-        }), 500
-
-
-@app.route('/api/estimate-generation', methods=['POST'])
-def api_estimate_generation():
-    """
-    API pour estimer le temps et les ressources de génération
-    
-    Returns:
-        JSON: Estimations de temps et taille
-    """
-    try:
-        data = request.get_json()
-        
-        num_buildings = data.get('num_buildings', 0)
-        start_date = data.get('start_date')
-        end_date = data.get('end_date')
-        frequency = data.get('frequency', '30T')
-        
-        estimation = generation_service.estimate_generation_resources(
-            num_buildings, start_date, end_date, frequency
-        )
-        
-        return jsonify({
-            'success': True,
-            'estimation': estimation
-        })
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur estimation génération: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # ==============================================================================
@@ -550,8 +635,7 @@ def internal_error(error):
 
 @app.before_request
 def before_request():
-    """Middleware exécuté avant chaque requête"""
-    # Compteur d'appels API (simple)
+    """Middleware avant chaque requête"""
     if not hasattr(app, '_api_calls_count'):
         app._api_calls_count = 0
     
@@ -561,12 +645,12 @@ def before_request():
 
 @app.after_request
 def after_request(response):
-    """Middleware exécuté après chaque requête"""
-    # Headers de sécurité basiques
+    """Middleware après chaque requête"""
+    # Headers de sécurité
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     
-    # CORS pour développement local (à retirer en production)
+    # CORS pour développement
     if APP_CONFIG.DEBUG:
         response.headers['Access-Control-Allow-Origin'] = '*'
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
@@ -576,84 +660,16 @@ def after_request(response):
 
 
 # ==============================================================================
-# FONCTIONS UTILITAIRES
-# ==============================================================================
-
-def _get_directory_size_mb(directory_path: str) -> float:
-    """
-    Calcule la taille d'un dossier en MB
-    
-    Args:
-        directory_path: Chemin du dossier
-        
-    Returns:
-        float: Taille en MB
-    """
-    try:
-        if not os.path.exists(directory_path):
-            return 0.0
-        
-        total_size = 0
-        for dirpath, dirnames, filenames in os.walk(directory_path):
-            for filename in filenames:
-                filepath = os.path.join(dirpath, filename)
-                if os.path.exists(filepath):
-                    total_size += os.path.getsize(filepath)
-        
-        return total_size / (1024 * 1024)
-        
-    except Exception:
-        return 0.0
-
-
-def cleanup_old_exports(max_age_days: int = 7):
-    """
-    Nettoie les anciens fichiers d'export
-    
-    Args:
-        max_age_days: Age maximum en jours
-    """
-    try:
-        import time
-        current_time = time.time()
-        cutoff_time = current_time - (max_age_days * 24 * 60 * 60)
-        
-        exports_dir = APP_CONFIG.EXPORTS_DIR
-        if not os.path.exists(exports_dir):
-            return
-        
-        removed_count = 0
-        for filename in os.listdir(exports_dir):
-            filepath = os.path.join(exports_dir, filename)
-            if os.path.isfile(filepath):
-                file_time = os.path.getmtime(filepath)
-                if file_time < cutoff_time:
-                    os.remove(filepath)
-                    removed_count += 1
-        
-        if removed_count > 0:
-            logger.info(f"🧹 {removed_count} anciens fichiers supprimés")
-            
-    except Exception as e:
-        logger.error(f"❌ Erreur nettoyage: {str(e)}")
-
-
-# ==============================================================================
-# POINT D'ENTRÉE DE L'APPLICATION
+# POINT D'ENTRÉE
 # ==============================================================================
 
 if __name__ == '__main__':
-    logger.info("🚀 Démarrage application Malaysia Electricity Generator")
-    logger.info(f"📁 Dossier exports: {APP_CONFIG.EXPORTS_DIR}")
-    logger.info(f"🔧 Mode debug: {APP_CONFIG.DEBUG}")
+    logger.info("🚀 L'application est prête !")
+    logger.info(f"   Ouvrez votre navigateur sur: http://127.0.0.1:{APP_CONFIG.PORT}")
+    logger.info("============================================================")
     
-    # Nettoyage initial des anciens exports
-    cleanup_old_exports()
-    
-    # Démarrage du serveur Flask
     app.run(
         host=APP_CONFIG.HOST,
         port=APP_CONFIG.PORT,
-        debug=APP_CONFIG.DEBUG,
-        threaded=True
+        debug=APP_CONFIG.DEBUG
     )
