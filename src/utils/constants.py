@@ -401,15 +401,15 @@ HTTP_HEADERS = {
 # PATTERNS ET EXPRESSIONS RÉGULIÈRES
 # ==============================================================================
 
-# Patterns de validation
+# Patterns de validation (CORRIGÉS)
 VALIDATION_PATTERNS = {
-    'email': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,},
-    'uuid': r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12},
-    'date_iso': r'^\d{4}-\d{2}-\d{2},
-    'datetime_iso': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}',
-    'filename_safe': r'^[a-zA-Z0-9._-]+,
-    'building_id': r'^[A-Z][A-Z0-9]{2}[A-Z0-9]{6},
-    'zone_name': r'^[a-z][a-z0-9_]{1,50}
+    'email': r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$',
+    'uuid': r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    'date_iso': r'^\d{4}-\d{2}-\d{2}$',
+    'datetime_iso': r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$',
+    'filename_safe': r'^[a-zA-Z0-9._-]+$',
+    'building_id': r'^[A-Z][A-Z0-9]{2}[A-Z0-9]{6}$',
+    'zone_name': r'^[a-z][a-z0-9_]{1,50}$'
 }
 
 # Caractères interdits dans les noms de fichiers
