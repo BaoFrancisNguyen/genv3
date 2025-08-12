@@ -135,63 +135,174 @@ class CompleteBuildingLoader:
         self, 
         zone_id: str, 
         zone_name: str,
-        method: str = 'administrative'
+        method: str = 'auto'  # Changé de 'administrative' à 'auto'
     ) -> OSMResult:
         """
-        Charge TOUS les bâtiments d'une localité administrative
-        
-        Args:
-            zone_id: Identifiant de la zone
-            zone_name: Nom de la zone  
-            method: Méthode ('administrative', 'bbox', 'hybrid')
-        
-        Returns:
-            OSMResult: Résultat complet avec tous les bâtiments
+        Charge avec VRAIE priorité administrative
         """
         start_time = time.time()
         self.stats['total_queries'] += 1
         
-        logger.info(f"🔄 Démarrage chargement COMPLET pour {zone_name} (méthode: {method})")
+        logger.info(f"🚀 CHARGEMENT PRIORITÉ ADMINISTRATIVE pour {zone_name}")
         
         try:
-            if method == 'administrative':
-                result = self._load_by_administrative_boundary(zone_id, zone_name)
-            elif method == 'bbox':
-                result = self._load_by_bounding_box(zone_id, zone_name)
-            elif method == 'hybrid':
-                result = self._load_by_hybrid_method(zone_id, zone_name)
-            else:
-                raise ValueError(f"Méthode inconnue: {method}")
+            # 🥇 PRIORITÉ 1: VRAIE MÉTHODE ADMINISTRATIVE
+            if method in ['auto', 'administrative']:
+                try:
+                    logger.info("🎯 TENTATIVE 1: VRAIE méthode administrative (relations OSM)")
+                    result = self._load_by_administrative_boundary(zone_id, zone_name)
+                    
+                    if result.success and len(result.buildings) > 0:
+                        result.query_time_seconds = time.time() - start_time
+                        self.stats['successful_queries'] += 1
+                        self.stats['buildings_loaded'] += len(result.buildings)
+                        
+                        logger.info(f"✅ SUCCÈS ADMINISTRATIVE: {len(result.buildings):,} bâtiments")
+                        logger.info(f"⏱️ Temps: {result.query_time_seconds:.1f}s")
+                        return result
+                    else:
+                        logger.warning("⚠️ Administrative: aucun bâtiment trouvé")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Administrative échouée: {str(e)}")
             
-            result.query_time_seconds = time.time() - start_time
-            result.method_used = method
+            # 🥈 FALLBACK: MÉTHODE BBOX
+            if method in ['auto', 'bbox']:
+                try:
+                    logger.info("📦 TENTATIVE 2: Méthode bbox (fallback)")
+                    result = self._load_by_bounding_box_real(zone_id, zone_name)  # Utiliser la vraie méthode bbox
+                    
+                    if result.success and len(result.buildings) > 0:
+                        result.query_time_seconds = time.time() - start_time
+                        self.stats['successful_queries'] += 1
+                        self.stats['buildings_loaded'] += len(result.buildings)
+                        
+                        logger.info(f"✅ SUCCÈS BBOX: {len(result.buildings):,} bâtiments")
+                        logger.info(f"⏱️ Temps: {result.query_time_seconds:.1f}s")
+                        return result
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Bbox échouée: {str(e)}")
             
-            if result.success:
-                self.stats['successful_queries'] += 1
-                self.stats['buildings_loaded'] += len(result.buildings)
-                logger.info(f"✅ {len(result.buildings)} bâtiments chargés en {result.query_time_seconds:.1f}s")
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"❌ Erreur chargement {zone_name}: {str(e)}")
+            # ❌ ÉCHEC TOTAL
+            logger.error(f"❌ TOUTES LES MÉTHODES ONT ÉCHOUÉ pour {zone_name}")
             return OSMResult(
                 buildings=[],
                 total_elements=0,
                 query_time_seconds=time.time() - start_time,
-                method_used=method,
+                method_used='failed_all',
                 coverage_complete=False,
                 success=False,
-                error_message=str(e)
+                error_message=f"Échec administrative et bbox"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ ERREUR GLOBALE pour {zone_name}: {str(e)}")
+            return OSMResult(
+                buildings=[],
+                total_elements=0,
+                query_time_seconds=time.time() - start_time,
+                method_used='error',
+                coverage_complete=False,
+                success=False,
+                error_message=f"Erreur globale: {str(e)}"
             )
     
     def _load_by_administrative_boundary(self, zone_id: str, zone_name: str) -> OSMResult:
         """
-        MÉTHODE CORRIGÉE: Utilise les bounding boxes au lieu des relations OSM problématiques
+        🥇 MÉTHODE ADMINISTRATIVE avec syntaxe Overpass CORRIGÉE
         """
-        logger.info(f"🗺️ Chargement CORRIGÉ pour: {zone_name}")
+        logger.info(f"🎯 VRAIE méthode administrative pour: {zone_name}")
         
-        # BOUNDING BOXES CORRIGÉES ET TESTÉES
+        # Relations administratives OSM validées
+        administrative_relations = {
+            # PAYS
+            'malaysia': 2108121,          
+            
+            # TERRITOIRES FÉDÉRAUX - IDs CORRIGÉS
+            'kuala_lumpur': 2939672,       
+            'putrajaya': 4443881,          
+            'labuan': 4521286,             
+            
+            # ÉTATS - IDs CORRIGÉS
+            'selangor': 2932285,           
+            'johor': 2939653,              
+            'penang': 4445131,             
+            'perak': 4445076,              
+            'sabah': 3879783,              
+            'sarawak': 3879784,            
+            'kedah': 4444908,              
+            'kelantan': 4443571,           
+            'terengganu': 4444411,         
+            'pahang': 4444595,             
+            'perlis': 4444918,             
+            'negeri_sembilan': 2939674,    
+            'melaka': 2939673,             
+        }
+        
+        relation_id = administrative_relations.get(zone_id.lower())
+        
+        if not relation_id:
+            logger.warning(f"❌ Pas de relation administrative OSM pour {zone_id}")
+            raise ValueError(f"Relation administrative non disponible pour {zone_id}")
+        
+        logger.info(f"🎯 Utilisation relation OSM administrative: {relation_id}")
+        
+        # REQUÊTE OVERPASS CORRIGÉE - Syntaxe simplifiée
+        query = f"""[out:json][timeout:300];
+    relation({relation_id});
+    map_to_area->.admin_area;
+    way["building"](area.admin_area);
+    out geom;"""
+        
+        logger.info(f"📝 REQUÊTE ADMINISTRATIVE CORRIGÉE:")
+        logger.info(f"   relation({relation_id}) → map_to_area → way[building]")
+        
+        try:
+            osm_data = self._execute_overpass_query(query.strip())
+            elements = osm_data.get('elements', [])
+            
+            logger.info(f"📋 Éléments OSM reçus (ADMINISTRATIVE): {len(elements):,}")
+            
+            if len(elements) == 0:
+                logger.warning("⚠️ Relation administrative trouvée mais aucun bâtiment")
+                # Essayer une requête de test pour vérifier la relation
+                test_query = f"[out:json][timeout:60];relation({relation_id});out;"
+                test_result = self._execute_overpass_query(test_query)
+                
+                if test_result.get('elements'):
+                    logger.info("✅ Relation existe dans OSM mais pas de bâtiments")
+                    raise ValueError("Relation administrative valide mais sans bâtiments")
+                else:
+                    logger.error("❌ Relation inexistante dans OSM")
+                    raise ValueError("Relation administrative inexistante")
+            
+            buildings = self._process_osm_elements(elements, zone_name)
+            
+            logger.info(f"🏗️ Bâtiments traités (ADMINISTRATIVE): {len(buildings):,}")
+            
+            return OSMResult(
+                buildings=buildings,
+                total_elements=len(elements),
+                query_time_seconds=0,
+                method_used='administrative_true',
+                coverage_complete=True,
+                success=True,
+                quality_score=self._calculate_quality_score(buildings),
+                warnings=["Relations OSM administratives officielles"]
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Erreur méthode administrative: {e}")
+            raise
+    
+    def _load_by_bounding_box_real(self, zone_id: str, zone_name: str) -> OSMResult:
+        """
+        🥈 VRAIE MÉTHODE BBOX: Fallback après échec administrative
+        """
+        logger.info(f"📦 FALLBACK BBOX pour: {zone_name}")
+        
+        # Bounding boxes corrigées (celles qui fonctionnent actuellement)
         corrected_bboxes = {
             'putrajaya': [101.65, 2.90, 101.75, 3.05],
             'kuala_lumpur': [101.60, 3.05, 101.75, 3.25],  
@@ -208,86 +319,44 @@ class CompleteBuildingLoader:
         
         bbox = corrected_bboxes.get(zone_id.lower())
         if not bbox:
-            # Fallback vers Nominatim
-            return self._fallback_to_nominatim_search(zone_name)
+            raise ValueError(f"Bbox non disponible pour {zone_id}")
         
         west, south, east, north = bbox
-        logger.info(f"📦 Utilisation bbox corrigée: [{west}, {south}, {east}, {north}]")
+        logger.info(f"📦 FALLBACK: Utilisation bbox: [{west}, {south}, {east}, {north}]")
         
-        # REQUÊTE OVERPASS SIMPLIFIÉE ET CORRIGÉE
+        # REQUÊTE BBOX (identique à celle qui fonctionne actuellement)
         query = f"""[out:json][timeout:180];
-    (
-    way["building"]({south},{west},{north},{east});
-    );
-    out geom;"""
+        (
+        way["building"]({south},{west},{north},{east});
+        );
+        out geom;"""
         
-        logger.info(f"📝 Requête Overpass: {query.strip()}")
+        logger.info(f"📝 REQUÊTE BBOX FALLBACK: ({south},{west},{north},{east})")
         
         try:
             osm_data = self._execute_overpass_query(query.strip())
             elements = osm_data.get('elements', [])
             
-            logger.info(f"📋 Éléments OSM reçus: {len(elements)}")
+            logger.info(f"📋 Éléments OSM reçus (BBOX): {len(elements)}")
             
             buildings = self._process_osm_elements(elements, zone_name)
             
-            logger.info(f"🏗️ Bâtiments traités: {len(buildings)}")
+            logger.info(f"🏗️ Bâtiments traités (BBOX): {len(buildings)}")
             
             return OSMResult(
                 buildings=buildings,
                 total_elements=len(elements),
                 query_time_seconds=0,
-                method_used='bbox_corrected',
-                coverage_complete=True,
+                method_used='bbox_fallback',
+                coverage_complete=False,  # Bbox peut manquer des zones
                 success=True,
                 quality_score=self._calculate_quality_score(buildings),
-                warnings=["Utilise bbox corrigée au lieu de relations OSM"] if len(buildings) > 0 else ["Aucun bâtiment trouvé"]
+                warnings=["Utilise bbox en fallback après échec administrative"]
             )
             
         except Exception as e:
-            logger.error(f"❌ Erreur requête bbox: {e}")
-            # Essayer le fallback Nominatim
-            return self._fallback_to_nominatim_search(zone_name)
-    
-    def _load_by_bounding_box(self, zone_id: str, zone_name: str) -> OSMResult:
-        """
-        MÉTHODE FALLBACK: Utilise une bounding box étendue
-        """
-        logger.info(f"📦 Chargement par bounding box: {zone_name}")
-        
-        bbox_config = self._get_zone_bbox(zone_id)
-        if not bbox_config:
-            raise ValueError(f"Pas de bounding box disponible pour {zone_id}")
-        
-        # Étendre la bbox de 15% pour capturer les zones périphériques
-        extended_bbox = self._extend_bbox(bbox_config, 0.15)
-        west, south, east, north = extended_bbox
-        
-        query = f"""
-        [out:json][timeout:300][maxsize:1073741824];
-        
-        // Récupérer tous les bâtiments dans la bounding box étendue
-        (
-          way["building"]({south},{west},{north},{east});
-          relation["building"]({south},{west},{north},{east});
-        );
-        
-        out geom;
-        """
-        
-        osm_data = self._execute_overpass_query(query.strip())
-        buildings = self._process_osm_elements(osm_data.get('elements', []), zone_name)
-        
-        return OSMResult(
-            buildings=buildings,
-            total_elements=len(osm_data.get('elements', [])),
-            query_time_seconds=0,
-            method_used='bbox',
-            coverage_complete=False,
-            success=True,
-            quality_score=self._calculate_quality_score(buildings),
-            warnings=["Méthode bbox peut manquer des bâtiments en périphérie"]
-        )
+            logger.error(f"❌ Erreur méthode bbox: {e}")
+            raise
     
     def _load_by_hybrid_method(self, zone_id: str, zone_name: str) -> OSMResult:
         """

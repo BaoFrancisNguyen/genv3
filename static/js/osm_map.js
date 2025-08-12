@@ -9,7 +9,7 @@ const MAP_CONFIG = {
     defaultZoom: 11,
     maxZoom: 18,
     minZoom: 8,
-    maxBuildings: 5000 // Limite pour performance
+    maxBuildings: 20000 // affichage max des bâtiments sur la carte
 };
 
 // État de la carte
