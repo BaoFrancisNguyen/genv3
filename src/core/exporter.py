@@ -45,7 +45,7 @@ class DataExporter:
         self.total_files_created = 0
         self.total_size_mb = 0.0
         
-        logger.info(f"✅ Exporteur initialisé - Dossier: {self.export_directory}")
+        logger.info(f"Exporteur initialisé - Dossier: {self.export_directory}")
     
     def export_complete_dataset(
         self, 
@@ -90,7 +90,7 @@ class DataExporter:
         # Export pour chaque format demandé
         for format_type in formats:
             if format_type not in EXPORT_CONFIG.SUPPORTED_FORMATS:
-                logger.warning(f"⚠️ Format {format_type} non supporté, ignoré")
+                logger.warning(f"Format {format_type} non supporté, ignoré")
                 continue
             
             try:
@@ -101,7 +101,7 @@ class DataExporter:
                 export_results['total_size_mb'] += format_results['total_size_mb']
                 
             except Exception as e:
-                logger.error(f"❌ Erreur export {format_type}: {str(e)}")
+                logger.error(f"Erreur export {format_type}: {str(e)}")
                 export_results['files_created'][format_type] = {
                     'success': False,
                     'error': str(e)
@@ -797,12 +797,12 @@ if __name__ == '__main__':
         formats=['csv', 'parquet']
     )
     
-    print(f"✅ Export test terminé:")
-    print(f"📁 Fichiers: {len(results['files_created'])}")
-    print(f"📊 Taille: {results['total_size_mb']:.2f} MB")
+    print(f"Export test terminé:")
+    print(f"Fichiers: {len(results['files_created'])}")
+    print(f"Taille: {results['total_size_mb']:.2f} MB")
     
     # Création du manifest
     manifest_path = exporter.create_export_manifest(results)
-    print(f"📋 Manifest: {manifest_path}")
+    print(f"Manifest: {manifest_path}")
 
                 
